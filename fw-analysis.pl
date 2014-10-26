@@ -4,6 +4,7 @@
 use strict;
 use warnings;
 #use Geo::IP;
+use Term::ANSIColor;
 
 my @lines;
 # get the lines of packets dropped by the FW
@@ -27,10 +28,15 @@ foreach my $line (@lines) {
 
 my $i = 0;
 
+print "=" x 72;
+print "\n";
+print "Number of packets per interface:\n";
 foreach my $p ( sort keys %iface_pkts ) {
 	print "$p => $iface_pkts{$p}\n";
 }
 
+print "\n\nNumber of unique source IPs: " . scalar(keys(%srcs)) . "\n";
+print "Top 10 sources:\n";
 foreach my $s ( sort { $srcs{$b} <=> $srcs{$a} } keys %srcs ) {
 	print "$s => $srcs{$s}\n";
 	$i++;
