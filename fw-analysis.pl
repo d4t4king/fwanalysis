@@ -168,7 +168,23 @@ sub get_net_and_dhcp_info() {
 		chomp($line);
 		if ($line =~ /GREEN_DEV=(.*)/) { $ndsettings{$1} = "green"; }
 		if ($line =~ /RED_DEV=(.*)/) { $ndsettings{$1} = "red"; }
+		if ($line =~ /GREEN_NETADDRESS=(.*)/) { $ndsettings{'green net addr'} = $1; }
+		if ($line =~ /GREEN_BROADCAST=(.*)/) { $ndsettings{'green net bdcst'} = $1; }
 	}
 	close ETH or die "Couldn't close ether net settings file: $! \n";
+
+	my %leases;
+	if ($ndsettings{'dhcp_enabled'}) {
+		open LEAS, "<$leases" or die "Couldn't open DHCP leases file: $! \n";
+		while (my $line = <LEAS>) {
+			chomp($line);
+			
+	#if ($ndsettings{'dhcp_enabled'}) {
+	#	open DHCP, "</var/smoothwall/dhcp/settings-green" or die "Couldn't open dhcp settings file for green: $! \n";
+	#	while (my $line = <DHCP>) {
+	#		chomp($line);
+	#		
+	#	}
+	#}
 	return \%ndsettings;
 }
