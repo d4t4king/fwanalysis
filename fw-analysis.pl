@@ -3,8 +3,18 @@
 
 use strict;
 use warnings;
-#use Geo::IP;
 use Term::ANSIColor;
+use Data::Dumper;
+
+if (&check_perl_mods()) {
+	use Net::Nslookup;
+	use Geo::IP::PurePerl;
+}
+
+&check_geoip_db();
+
+my $settings = &get_net_and_dhcp_info();
+#print Dumper($settings);
 
 my @lines;
 # get the lines of packets dropped by the FW
@@ -15,7 +25,7 @@ while (my $line = <FILE>) {
 }
 close FILE or die "Couldn't close messages file: $! \n";
 
-my (%iface_pkts, %inbound_pkts, %outbound_pkts, %dports, %dests, %srcs, %protos);
+my (%iface_pkts, %inbound_pkts, %outbound_pkts, %dports, %dests, %srcs, %protos, %watched, %protoport);
 foreach my $line (@lines) {
 	#Oct 24 18:57:15 swe kernel: [171040.374665] Denied-by-filter:INPUT IN=eth1 OUT= MAC=00:21:9b:fc:95:c4:00:01:5c:64:ae:46:08:00 SRC=184.105.247.254 DST=76.167.67.20 LEN=51 TOS=0x00 PREC=0x00 TTL=54 ID=22438 DF PROTO=UDP SPT=44236 DPT=623 LEN=31
 	# We'll start with a rough glossing over.
@@ -24,21 +34,141 @@ foreach my $line (@lines) {
 	if ( $line =~ /DST=(.*?) / ) { $dests{$1}++; }
 	if ( $line =~ /DPT=(.*?) / ) { $dports{$1}++; }
 	if ( $line =~ /PROTO=(.*?) / ) { $protos{$1}++; }
+	if ( $line =~ /PROTO=TCP SPT=.*? DPT=(?:8[01]|44[13]) / ) { $watched{'http(s)'}++; }
+	if ( $line =~ /PROTO=TCP SPT=.*? DPT=22 / ) { $watched{'ssh'}++; }
+	if ( $line =~ /PROTO=UDP SPT=.*? DPT=123 / ) { $watched{'ntp'}++; }
+	if ( $line =~ /PROTO=UDP SPT=.*? DPT=53 / ) { $watched{'dns'}++; }
+	if ( $line =~ /PROTO=TCP SPT=.*? DPT=21 / ) { $watched{'ftp'}++; }
+	if ( $line =~ /PROTO=TCP SPT=.*? DPT=23 / ) { $watched{'telnet'}++; }
+	if ( $line =~ /PROTO=TCP SPT=.*? DPT=25 / ) { $watched{'smtp'}++; }
+	if ( $line =~ /PROTO=(.*?) SPT=.*? DPT=(.*?) / ) { $protoport{"$1/$2"}++; }
 }
 
 my $i = 0;
 
 print "=" x 72;
 print "\n";
-print "Number of packets per interface:\n";
+print colored("Number of packets per interface:\n", "cyan");
+print colored("================================\n", "cyan");
 foreach my $p ( sort keys %iface_pkts ) {
-	print "$p => $iface_pkts{$p}\n";
+	#print "$p => ". nslookup($p) . " ==> $iface_pkts{$p}\n";
+	print colored("$p", "$settings->{$p}");
+	print "\t=>\t$iface_pkts{$p}\n";
 }
 
-print "\n\nNumber of unique source IPs: " . scalar(keys(%srcs)) . "\n";
-print "Top 10 sources:\n";
+print "\nNumber of unique source IPs: ";
+print colored(scalar(keys(%srcs)) . "\n", "green");
+print colored("Top 10 sources:\n", "cyan");
+print colored("===============\n", "cyan");
 foreach my $s ( sort { $srcs{$b} <=> $srcs{$a} } keys %srcs ) {
-	print "$s => $srcs{$s}\n";
+	my $name = nslookup('host' => $s, 'type' => "PTR");
+	if ((!defined($name)) || ($name eq "")) { $name = 'UNRESOLVED'; }
+	print "$s => $name => $srcs{$s}\n";
 	$i++;
 	last if ( $i >= 10 );
+}
+
+$i = 0;
+print "\nNumber of unique destination IPs: ";
+print colored(scalar(keys(%dests)) . "\n", "green");
+print colored("Top 10 Destinations:\n", "cyan");
+print colored("====================\n", "cyan");
+foreach my $d ( sort { $dests{$b} <=> $dests{$a} } keys %dests ) {
+	my $name = nslookup('host' => $d, 'type' => "PTR");
+	if ((!defined($name)) || ($name eq "")) { $name = "UNRESOLVED"; }
+	print "$d => $name => $dests{$d}\n";
+	$i++;
+	last if ( $i >= 10 );
+}
+
+$i = 0;
+print colored("\nWatched protocols:\n", "cyan");
+print colored("====================\n", "cyan");
+foreach my $k ( sort keys %watched ) {
+	print "$k\t=>\t$watched{$k}\n";
+}
+
+print colored("\nTop 10 Proto/Port's:\n", "cyan");
+print colored("======================\n", "cyan");
+foreach my $k ( sort { $protoport{$b} <=> $protoport{$a} } keys %protoport ) {
+	print "$k\t\t=>\t$protoport{$k}\n";
+	$i++;
+	last if ( $i >= 10 );
+}
+
+#######################################################################
+sub check_geoip_db() {
+	if ( -f "/usr/share/GeoIP/GeoIP.dat" ) {
+		use Data::Dumper;
+		my @stats = stat("/usr/share/GeoIP/GeoIP.dat");
+		#print Dumper(@stats);
+		my $time = time();
+		if (($time - $stats[10]) >= 2592000) {
+			print colored("GeoIP.dat file is over 30 days old.  Consider updating.\n", "yellow");
+		} else {
+			print colored("GeoIP.dat OK.\n", "green");
+		}
+	} else {
+		print color 'red';
+		print "Couldn't find GeoIP.dat.\n";
+		print color 'reset';
+	}
+}
+
+sub check_perl_mods() {
+	my $status = 0;
+	my $result = `/usr/bin/perl -mNet::Nslookup -e ";" 2>&1`;
+	if ($result =~ /^Can't locate /) {
+		#print colored("Can't find Net::Nslookup.  Installing...", "red");
+		#system("cd; wget http://search.cpan.org/CPAN/authors/id/G/GA/GAAS/Digest-HMAC-1.03.tar.gz > /dev/null 2>&1");
+		#system("cd; tar xf Digest-HMAC-1.03.tar.gz > /dev/null 2>&1; cd Digest-HMAC-1.03/; perl Makefile.PL /dev/null 2>&1; make >/dev/null 2>&1 && make install > /dev/null 2>&1");
+		#system("cd; wget http://search.cpan.org/CPAN/authors/id/N/NL/NLNETLABS/Net-DNS-0.80.tar.gz > /dev/null 2>&1");
+		#system("cd; tar xf Net-DNS-0.80.tar.gz > /dev/null 2>&1; cd Net-DNS-0.80/; perl Makefile.PL > /dev/null 2>&1; make >/dev/null 2>&1 && make install > /dev/null 2>&1");
+		#system("cd; wget http://search.cpan.org/CPAN/authors/id/D/DA/DARREN/Net-Nslookup-2.01.tar.gz > /dev/null 2>&1");
+		#system("cd; tar xf Net-Nslookup-2.01.tar.gz > /dev/null 2>&1; cd Net-Nslookup-2.01/; perl Makefile.PL >/dev/null 2>&1; make >/dev/null 2>&1 && make install > /dev/null 2>&1");
+		#system("cd; rm -rf Digest-HMAC-1.03* Net-DNS-0.80* Net-Nslookup-2.01* > /dev/null 2>&1");
+		#print colored("done.\n", "red");
+		print colored("Couldn't find Net::Nslookup. Please run the included script: install-mods.sh.", "red");
+		$status = 1
+	} elsif ((! defined($result)) || $result eq "") {
+		print colored("Net::Nslookup OK.\n", "green");
+		$status = 1
+	} else {
+		print colored("$result\n", "red");
+		$status = 0
+	}
+	if ($status == 0) { return $status; }
+	# Geo::IP wants libgeoip to be newer than v1.5.0, which it apparently isn't.
+	# So we'll use the PurePerl version, which works just as well.
+	$result = `/usr/bin/perl -mGeo::IP::PurePerl -e ";" 2>&1`;
+	if ($result =~ /^Can't locate /) {
+		#print colored("Can't find Geo::IP::PurePerl.  Installing...", "red");
+		#system("cd; wget http://search.cpan.org/CPAN/authors/id/B/BO/BORISZ/Geo-IP-PurePerl-1.25.tar.gz >/dev/null 2>&1");
+		#system("cd; tar xf Geo-IP-PurePerl-1.25.tar.gz > /dev/null 2>&1; cd Geo-IP-PurePerl-1.25/; perl Makefile.PL > /dev/null 2>&1; make >/dev/null 2>&1 && make insstall > /dev/null 2>&1");
+		#print colored("done.\n", "red");
+		print colored("Couldn't find Geo::IP::PurePerl.  Please run the included script: install-mods.sh.", "red");
+		$status = 1;
+	} elsif ((!defined($result)) || $result eq "") {
+		print colored("Geo::IP::PurePerl OK", "green");
+		$status = 1;
+	} else {
+		print colored("$result\n", "red");
+		$status = 0;
+	}
+	#system("sed -i -e 's/#\(use .*\)/\1/g' $0");
+	return $status;
+}
+
+sub get_net_and_dhcp_info() {
+	my %ndsettings;
+	my $leases = "/usr/etc/dhcpd.leases";
+	if ( -f "/var/smoothwall/dhcp/enable" ) { $ndsettings{'dhcp_enabled'} = 1; }
+	open ETH, "</var/smoothwall/ethernet/settings" or die "Couldn't open ethernet settings file: $! \n";
+	while (my $line = <ETH>) {
+		chomp($line);
+		if ($line =~ /GREEN_DEV=(.*)/) { $ndsettings{$1} = "green"; }
+		if ($line =~ /RED_DEV=(.*)/) { $ndsettings{$1} = "red"; }
+	}
+	close ETH or die "Couldn't close ether net settings file: $! \n";
+	return \%ndsettings;
 }
