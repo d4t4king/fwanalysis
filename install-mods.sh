@@ -94,5 +94,14 @@ if [ ! $? == 0 ]; then
 	make && make install
 fi
 cd
+perl -mConfig::Simple -e ';' > /dev/null 2>&1
+if [ ! $? == 0 ]; then
+	wget http://search.cpan.org/CPAN/authors/id/S/SH/SHERZODR/Config-Simple-4.59.tar.gz
+	tar xf Config-Simple-4.59.tar.gz
+	cd Config-Simple-4.59
+	perl Makefile.PL
+	make && make install
+fi
+cd
 
-rm -rf Digest* Net* Geo-IP* Sub* Carp* Bit*
+rm -rf Digest* Net* Geo-IP* Sub* Carp* Bit* Date* Config*
