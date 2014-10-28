@@ -10,6 +10,7 @@ use Data::Dumper;
 if (&check_perl_mods()) {
 	use Net::Nslookup;
 	use Geo::IP::PurePerl;
+	use Date::Calc qw(:all);
 }
 
 &check_geoip_db();
@@ -72,6 +73,9 @@ print colored("===============\n", "cyan");
 foreach my $s ( sort { $srcs{$b} <=> $srcs{$a} } keys %srcs ) {
 	my $name = nslookup('host' => $s, 'type' => "PTR");
 	if ((!defined($name)) || ($name eq "")) { $name = 'UNRESOLVED'; }
+	if (($name eq "UNRESOLVED") && (exists($settings->{'lease_hash'}{$s}))) {
+		$name = $settings->{'lease_hash'}{$s};
+	}
 	my $cc = $gip->country_code_by_addr($s);
 	if ((!defined($cc)) || ($cc eq "")) { $cc = 'XX'; }
 	print "$s => $name => $srcs{$s} ($cc) \n";
@@ -87,6 +91,9 @@ print colored("====================\n", "cyan");
 foreach my $d ( sort { $dests{$b} <=> $dests{$a} } keys %dests ) {
 	my $name = nslookup('host' => $d, 'type' => "PTR");
 	if ((!defined($name)) || ($name eq "")) { $name = "UNRESOLVED"; }
+	if (($name eq "UNRESOLVED") && (exists($settings->{'lease_hash'}{$d}))) {
+		$name = $settings->{'lease_hash'}{$d};
+	}
 	my $cc = $gip->country_code_by_addr($d);
 	if ((!defined($cc)) || ($cc eq "")) { $cc = 'XX'; }
 	print "$d => $name => $dests{$d} ($cc) \n";
@@ -120,14 +127,12 @@ print colored("\nTop 10 Source Countries:\n", "cyan");
 print colored("==========================\n", "cyan");
 foreach my $sc ( sort { $src_countries{$b} <=> $src_countries{$a} } keys %src_countries ) {
 	my $tabs = "";
-	if (length($sc) >= 16) {
+	if (length($sc) >= 17) {
 		$tabs = "\t";
-	} elsif ((length($sc) < 16) && (length($sc) >= 12)) {
+	} elsif ((length($sc) < 17) && (length($sc) >= 7)) {
 		$tabs = "\t\t";
-	} elsif ((length($sc) < 12) && (length($sc) >= 8)) {
+	} elsif (length($sc) < 7) {
 		$tabs = "\t\t\t";
-	} elsif ((length($sc) < 8) && (length($sc) >= 4)) {
-		$tabs = "\t\t\t\t";
 	}
 
 	print "$sc$tabs=>\t$src_countries{$sc}\n";
@@ -139,7 +144,13 @@ $i = 0;
 print colored("\nTop 10 Destination Countries:\n", "cyan");
 print colored("===============================\n", "cyan");
 foreach my $dc ( sort { $dest_countries{$b} <=> $dest_countries{$a} } keys %dest_countries ) {
-	print "$dc\t\t=>\t$dest_countries{$dc}\n";
+	my $tabs = "";
+	if (length($dc) >= 9) {
+		$tabs = "\t";
+	} else {
+		$tabs = "\t\t";
+	}
+	print "$dc$tabs=>\t$dest_countries{$dc}\n";
 	$i++;
 	last if ( $i >= 10 );
 }
@@ -218,10 +229,40 @@ sub get_net_and_dhcp_info() {
 		if ($line =~ /GREEN_NETADDRESS=(.*)/) { $ndsettings{'green net addr'} = $1; }
 		if ($line =~ /GREEN_BROADCAST=(.*)/) { $ndsettings{'green net bdcst'} = $1; }
 	}
-	close ETH or die "Couldn't close ether net settings file: $! \n";
+	close ETH or die "Couldn't close ethernet settings file: $! \n";
 
-	#my %leases;
-	#if ($ndsettings{'dhcp_enabled'}) {
-			
+	open LEAS, "</usr/etc/dhcpd.leases";
+	my $lease_data = do { local $/; <LEAS> };
+	close LEAS;
+
+	my @records = split(/\}/, $lease_data);
+
+	foreach my $r (@records) {
+		$r =~ /lease ([0-9.]+) {.*?starts \d .*?([0-9:\/ ]+).*?ends \d .*?([0-9:\/ ]+).*?binding state (active|free).*?client-hostname "(.*?)";/s;
+		my $ip = $1; my $start = $2; my $end = $3; my $state = $4; my $name = $5;
+		my ($Sy, $Sm, $Sd, $Sh, $Smm, $Ss) = &parse_datetime($start);
+		next if ((!defined($Sy)) || ($Sy eq "")); 
+		my $lower = Date_to_Days($Sy,$Sm,$Sd);
+		my ($Ey, $Em, $Ed, $Eh, $Emm, $Es) = &parse_datetime($end);
+		next if ((!defined($Ey)) || ($Ey eq ""));
+		my $upper = Date_to_Days($Ey, $Em, $Ed);
+		my $gmt = gmtime();
+		my ($tyear, $tmo, $tday, $thour, $tmin, $tsec) = Today_and_Now($gmt);
+		my $date = Date_to_Days($tyear, $tmo, $tday);
+		#if (($date >= $lower) && ($date <= $upper)) {
+			$ndsettings{'lease_hash'}{$ip} = $name;
+		#}
+	}
+	
 	return \%ndsettings;
+}
+
+sub parse_datetime($) {
+	no warnings;
+	my $dstr = shift(@_);
+	my ($date, $time) = split(/ /, $dstr);
+	my ($y, $m, $d) = split(/\//, $date);
+	my ($h, $mm, $s) = split(/:/, $time);
+
+	return ($y, $m, $d, $h, $mm, $s);
 }
