@@ -49,4 +49,50 @@ if [ ! $? == 0 ]; then
 	make && make install
 fi
 cd
-rm -rf Digest* Net* Geo-IP*
+perl -mSub::Uplevel -e ';' > /dev/null 2>&1
+if [ ! $? == 0 ]; then
+	wget http://search.cpan.org/CPAN/authors/id/D/DA/DAGOLDEN/Sub-Uplevel-0.24.tar.gz
+	tar xf Sub-Uplevel-0.24.tar.gz
+	cd Sub-Uplevel-0.24/
+	perl Makefile.PL
+	make && make install
+fi
+cd
+perl -mTest::Exception -e ';' > /dev/null 2>&1
+if [ ! $? == 0 ]; then
+	wget http://search.cpan.org/CPAN/authors/id/E/EX/EXODIST/Test-Exception-0.35.tar.gz
+	tar xf Test-Exception-0.35.tar.gz
+	cd Test-Exception-0.35/
+	perl Makefile.PL
+	make && make install
+fi
+cd
+perl -mCarp::Clan -e ';' > /dev/null 2>&1
+if [ ! $? == 0 ]; then
+	wget http://search.cpan.org/CPAN/authors/id/S/ST/STBEY/Carp-Clan-6.04.tar.gz
+	tar xf Carp-Clan-6.04.tar.gz
+	cd Carp-Clan-6.04/
+	perl Makefile.PL
+	make && make install
+fi
+cd
+perl -mBit::Vector -e ';' > /dev/null 2>&1
+if [ ! $? == 0 ]; then
+	wget http://search.cpan.org/CPAN/authors/id/S/ST/STBEY/Bit-Vector-7.3.tar.gz
+	tar xf Bit-Vector-7.3.tar.gz
+	cd Bit-Vector-7.3/
+	perl Makefile.PL
+	make && make install
+fi
+cd
+perl -mDate::Calc -e ';' > /dev/null 2>&1
+if [ ! $? == 0 ]; then
+	wget http://search.cpan.org/CPAN/authors/id/S/ST/STBEY/Date-Calc-6.3.tar.gz
+	tar xf Date-Calc-6.3.tar.gz
+	cd Date-Calc-6.3/
+	perl Makefile.PL
+	make && make install
+fi
+cd
+
+rm -rf Digest* Net* Geo-IP* Sub* Carp* Bit*
