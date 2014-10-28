@@ -3,6 +3,7 @@
 
 use strict;
 use warnings;
+use feature qw( switch );
 use Term::ANSIColor;
 use Data::Dumper;
 
@@ -103,7 +104,13 @@ $i = 0;
 print colored("\nTop 10 Proto/Port's:\n", "cyan");
 print colored("======================\n", "cyan");
 foreach my $k ( sort { $protoport{$b} <=> $protoport{$a} } keys %protoport ) {
-	print "$k\t\t=>\t$protoport{$k}\n";
+	my $tabs = "";
+	if (length($k) >= 8) {
+		$tabs = "\t";
+	} else {
+		$tabs = "\t\t";
+	}
+	print "$k$tabs=>\t$protoport{$k}\n";
 	$i++;
 	last if ( $i >= 10 );
 }
@@ -112,7 +119,18 @@ $i = 0;
 print colored("\nTop 10 Source Countries:\n", "cyan");
 print colored("==========================\n", "cyan");
 foreach my $sc ( sort { $src_countries{$b} <=> $src_countries{$a} } keys %src_countries ) {
-	print "$sc\t\t=>\t$src_countries{$sc}\n";
+	my $tabs = "";
+	if (length($sc) >= 16) {
+		$tabs = "\t";
+	} elsif ((length($sc) < 16) && (length($sc) >= 12)) {
+		$tabs = "\t\t";
+	} elsif ((length($sc) < 12) && (length($sc) >= 8)) {
+		$tabs = "\t\t\t";
+	} elsif ((length($sc) < 8) && (length($sc) >= 4)) {
+		$tabs = "\t\t\t\t";
+	}
+
+	print "$sc$tabs=>\t$src_countries{$sc}\n";
 	$i++;
 	last if ( $i >= 10 );
 }
