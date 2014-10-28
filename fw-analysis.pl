@@ -25,13 +25,15 @@ while (my $line = <FILE>) {
 }
 close FILE or die "Couldn't close messages file: $! \n";
 
-my (%iface_pkts, %inbound_pkts, %outbound_pkts, %dports, %dests, %srcs, %protos, %watched, %protoport);
+my $gip = Geo::IP::PurePerl->open('/usr/share/GeoIP/GeoIP.dat', GEOIP_MEMORY_CACHE);
+my (%iface_pkts, %inbound_pkts, %outbound_pkts, %dports, %dests, %srcs, %protos, %watched, %protoport, %src_countries, %dest_countries);
 foreach my $line (@lines) {
 	#Oct 24 18:57:15 swe kernel: [171040.374665] Denied-by-filter:INPUT IN=eth1 OUT= MAC=00:21:9b:fc:95:c4:00:01:5c:64:ae:46:08:00 SRC=184.105.247.254 DST=76.167.67.20 LEN=51 TOS=0x00 PREC=0x00 TTL=54 ID=22438 DF PROTO=UDP SPT=44236 DPT=623 LEN=31
 	# We'll start with a rough glossing over.
+	my $src; my $dst;
 	if ( $line =~ /IN=(.*?) / ) { $iface_pkts{$1}++; }
-	if ( $line =~ /SRC=(.*?) / ) { $srcs{$1}++; }
-	if ( $line =~ /DST=(.*?) / ) { $dests{$1}++; }
+	if ( $line =~ /SRC=(.*?) / ) { $src = $1; $srcs{$src}++; }
+	if ( $line =~ /DST=(.*?) / ) { $dst = $1; $dests{$dst}++; }
 	if ( $line =~ /DPT=(.*?) / ) { $dports{$1}++; }
 	if ( $line =~ /PROTO=(.*?) / ) { $protos{$1}++; }
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=(?:8[01]|44[13]) / ) { $watched{'http(s)'}++; }
@@ -42,6 +44,12 @@ foreach my $line (@lines) {
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=23 / ) { $watched{'telnet'}++; }
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=25 / ) { $watched{'smtp'}++; }
 	if ( $line =~ /PROTO=(.*?) SPT=.*? DPT=(.*?) / ) { $protoport{"$1/$2"}++; }
+	my $country = $gip->country_name_by_addr($src);
+	if ((!defined($country)) || ($country eq "")) { $country = 'XX'; }
+	$src_countries{$country}++;
+	$country = $gip->country_name_by_addr($dst);
+	if ((!defined($country)) || ($country eq "")) { $country = 'XX'; }
+	$dest_countries{$country}++;
 }
 
 my $i = 0;
@@ -63,7 +71,9 @@ print colored("===============\n", "cyan");
 foreach my $s ( sort { $srcs{$b} <=> $srcs{$a} } keys %srcs ) {
 	my $name = nslookup('host' => $s, 'type' => "PTR");
 	if ((!defined($name)) || ($name eq "")) { $name = 'UNRESOLVED'; }
-	print "$s => $name => $srcs{$s}\n";
+	my $cc = $gip->country_code_by_addr($s);
+	if ((!defined($cc)) || ($cc eq "")) { $cc = 'XX'; }
+	print "$s => $name => $srcs{$s} ($cc) \n";
 	$i++;
 	last if ( $i >= 10 );
 }
@@ -76,18 +86,20 @@ print colored("====================\n", "cyan");
 foreach my $d ( sort { $dests{$b} <=> $dests{$a} } keys %dests ) {
 	my $name = nslookup('host' => $d, 'type' => "PTR");
 	if ((!defined($name)) || ($name eq "")) { $name = "UNRESOLVED"; }
-	print "$d => $name => $dests{$d}\n";
+	my $cc = $gip->country_code_by_addr($d);
+	if ((!defined($cc)) || ($cc eq "")) { $cc = 'XX'; }
+	print "$d => $name => $dests{$d} ($cc) \n";
 	$i++;
 	last if ( $i >= 10 );
 }
 
-$i = 0;
 print colored("\nWatched protocols:\n", "cyan");
 print colored("====================\n", "cyan");
 foreach my $k ( sort keys %watched ) {
 	print "$k\t=>\t$watched{$k}\n";
 }
 
+$i = 0;
 print colored("\nTop 10 Proto/Port's:\n", "cyan");
 print colored("======================\n", "cyan");
 foreach my $k ( sort { $protoport{$b} <=> $protoport{$a} } keys %protoport ) {
@@ -96,6 +108,23 @@ foreach my $k ( sort { $protoport{$b} <=> $protoport{$a} } keys %protoport ) {
 	last if ( $i >= 10 );
 }
 
+$i = 0;
+print colored("\nTop 10 Source Countries:\n", "cyan");
+print colored("==========================\n", "cyan");
+foreach my $sc ( sort { $src_countries{$b} <=> $src_countries{$a} } keys %src_countries ) {
+	print "$sc\t\t=>\t$src_countries{$sc}\n";
+	$i++;
+	last if ( $i >= 10 );
+}
+
+$i = 0;
+print colored("\nTop 10 Destination Countries:\n", "cyan");
+print colored("===============================\n", "cyan");
+foreach my $dc ( sort { $dest_countries{$b} <=> $dest_countries{$a} } keys %dest_countries ) {
+	print "$dc\t\t=>\t$dest_countries{$dc}\n";
+	$i++;
+	last if ( $i >= 10 );
+}
 #######################################################################
 sub check_geoip_db() {
 	if ( -f "/usr/share/GeoIP/GeoIP.dat" ) {
@@ -149,7 +178,7 @@ sub check_perl_mods() {
 		print colored("Couldn't find Geo::IP::PurePerl.  Please run the included script: install-mods.sh.", "red");
 		$status = 1;
 	} elsif ((!defined($result)) || $result eq "") {
-		print colored("Geo::IP::PurePerl OK", "green");
+		print colored("Geo::IP::PurePerl OK\n", "green");
 		$status = 1;
 	} else {
 		print colored("$result\n", "red");
@@ -173,18 +202,8 @@ sub get_net_and_dhcp_info() {
 	}
 	close ETH or die "Couldn't close ether net settings file: $! \n";
 
-	my %leases;
-	if ($ndsettings{'dhcp_enabled'}) {
-		open LEAS, "<$leases" or die "Couldn't open DHCP leases file: $! \n";
-		while (my $line = <LEAS>) {
-			chomp($line);
-			
+	#my %leases;
 	#if ($ndsettings{'dhcp_enabled'}) {
-	#	open DHCP, "</var/smoothwall/dhcp/settings-green" or die "Couldn't open dhcp settings file for green: $! \n";
-	#	while (my $line = <DHCP>) {
-	#		chomp($line);
-	#		
-	#	}
-	#}
+			
 	return \%ndsettings;
 }
