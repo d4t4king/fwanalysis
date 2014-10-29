@@ -6,17 +6,42 @@ use warnings;
 use feature qw( switch );
 use Term::ANSIColor;
 use Data::Dumper;
+use Getopt::Long;
+
+my $_depth = "10";
+my $_config = "fwa.conf";
+
+if ((defined($config)) && ($config ne "") { $config = $_config; }
+
+my $cfg = new Config::Simple($config);
+if (!defined($depth)) {	$depth = $cfg->param('Depth'); }
+if (!defined($nodns)) { $nodns = $cfg->param('NoDNS'); }
+if (!defined($nocolor)) { $nocolor = $cfg->param('NoColor'); }
+
+if (($depth) && ($depth ne "") && ($depth =~ /\d+/)) { $_depth = $depth; }
+
+my ($help, $nodns, $nocolor);
+GetOptions(
+	'h|help'	=> \$help,
+	'd|depth=s'	=> \$depth,
+	'c|config=s'	=> \$config,
+	'n|no-dns'	=> \$nodns,
+	'nc|no-color'	=> \$nocolor
+);
+
+if ($help) { &Usage(); }
 
 if (&check_perl_mods()) {
 	use Net::Nslookup;
 	use Geo::IP::PurePerl;
 	use Date::Calc qw(:all);
+	use Config::Simple;
 }
+
 
 &check_geoip_db();
 
 my $settings = &get_net_and_dhcp_info();
-#print Dumper($settings);
 
 my @lines;
 # get the lines of packets dropped by the FW
@@ -58,58 +83,101 @@ my $i = 0;
 
 print "=" x 72;
 print "\n";
-print colored("Number of packets per interface:\n", "cyan");
-print colored("================================\n", "cyan");
+if ($nocolor) {
+	print "Number of packets per interface:\n";
+	print "================================\n";
+} else {
+	print colored("Number of packets per interface:\n", "cyan");
+	print colored("================================\n", "cyan");
+}
 foreach my $p ( sort keys %iface_pkts ) {
 	#print "$p => ". nslookup($p) . " ==> $iface_pkts{$p}\n";
-	print colored("$p", "$settings->{$p}");
+	if ($nocolor) {
+		print "$p";
+	} else {
+		print colored("$p", "$settings->{$p}");
+	}
 	print "\t=>\t$iface_pkts{$p}\n";
 }
 
 print "\nNumber of unique source IPs: ";
-print colored(scalar(keys(%srcs)) . "\n", "green");
-print colored("Top 10 sources:\n", "cyan");
-print colored("===============\n", "cyan");
+if ($nocolor) {	print scalar(keys(%srcs)) . "\n"; }
+else { print colored(scalar(keys(%srcs)) . "\n", "green"); }
+if ($nocolor) {
+	print "Top $_depth sources:\n";
+	print "===============\n";
+} else {
+	print colored("Top $_depth sources:\n", "cyan");
+	print colored("===============\n", "cyan");
+}
 foreach my $s ( sort { $srcs{$b} <=> $srcs{$a} } keys %srcs ) {
-	my $name = nslookup('host' => $s, 'type' => "PTR");
-	if ((!defined($name)) || ($name eq "")) { $name = 'UNRESOLVED'; }
-	if (($name eq "UNRESOLVED") && (exists($settings->{'lease_hash'}{$s}))) {
-		$name = $settings->{'lease_hash'}{$s};
+	my $name;
+	unless ($nodns) {
+		$name = nslookup('host' => $s, 'type' => "PTR");
+		if ((!defined($name)) || ($name eq "")) { $name = 'UNRESOLVED'; }
+		if (($name eq "UNRESOLVED") && (exists($settings->{'lease_hash'}{$s}))) {
+			$name = $settings->{'lease_hash'}{$s};
+		}
+		if ($name eq "UNRESOLVED") {
+			$name = nslookup('host' => $s, 'type' => 'A', 'server' => '127.0.0.1');
+		}
+		if ((!defined($name)) || ($name eq "")) { $name = 'UNRESOLVED'; }
 	}
 	my $cc = $gip->country_code_by_addr($s);
 	if ((!defined($cc)) || ($cc eq "")) { $cc = 'XX'; }
-	print "$s => $name => $srcs{$s} ($cc) \n";
+	if ($nodns) { print "$s => $srcs{$s} ($cc) \n"; }
+	else { print "$s => $name => $srcs{$s} ($cc) \n"; }
 	$i++;
-	last if ( $i >= 10 );
+	last if ( $i >= $_depth );
 }
 
 $i = 0;
 print "\nNumber of unique destination IPs: ";
-print colored(scalar(keys(%dests)) . "\n", "green");
-print colored("Top 10 Destinations:\n", "cyan");
-print colored("====================\n", "cyan");
+if ($nocolor) { print scalar(keys(%dests)) . "\n"; }
+else { print colored(scalar(keys(%dests)) . "\n", "green"); }
+if ($nocolor) {
+	print "Top $_depth Destinations:\n";
+	print "====================\n";
+} else {
+	print colored("Top $_depth Destinations:\n", "cyan");
+	print colored("====================\n", "cyan");
+}
 foreach my $d ( sort { $dests{$b} <=> $dests{$a} } keys %dests ) {
-	my $name = nslookup('host' => $d, 'type' => "PTR");
-	if ((!defined($name)) || ($name eq "")) { $name = "UNRESOLVED"; }
-	if (($name eq "UNRESOLVED") && (exists($settings->{'lease_hash'}{$d}))) {
-		$name = $settings->{'lease_hash'}{$d};
+	my $name;
+	unless ($nodns) {
+		$name = nslookup('host' => $d, 'type' => "PTR");
+		if ((!defined($name)) || ($name eq "")) { $name = "UNRESOLVED"; }
+		if (($name eq "UNRESOLVED") && (exists($settings->{'lease_hash'}{$d}))) {
+			$name = $settings->{'lease_hash'}{$d};
+		}
 	}
 	my $cc = $gip->country_code_by_addr($d);
 	if ((!defined($cc)) || ($cc eq "")) { $cc = 'XX'; }
-	print "$d => $name => $dests{$d} ($cc) \n";
+	if ($nodns) { print "$d => $dests{$d} ($cc) \n"; }
+	else { print "$d => $name => $dests{$d} ($cc) \n"; }
 	$i++;
-	last if ( $i >= 10 );
+	last if ( $i >= $_depth );
 }
 
-print colored("\nWatched protocols:\n", "cyan");
-print colored("====================\n", "cyan");
+if ($nocolor) {
+	print "\nWatched protocols:\n";
+	print "====================\n";
+} else {
+	print colored("\nWatched protocols:\n", "cyan");
+	print colored("====================\n", "cyan");
+}
 foreach my $k ( sort keys %watched ) {
 	print "$k\t=>\t$watched{$k}\n";
 }
 
 $i = 0;
-print colored("\nTop 10 Proto/Port's:\n", "cyan");
-print colored("======================\n", "cyan");
+if ($nocolor) {
+	print "\nTop $_depth Proto/Port's:\n";
+	print "======================\n";
+} else {
+	print colored("\nTop $_depth Proto/Port's:\n", "cyan");
+	print colored("======================\n", "cyan");
+}
 foreach my $k ( sort { $protoport{$b} <=> $protoport{$a} } keys %protoport ) {
 	my $tabs = "";
 	if (length($k) >= 8) {
@@ -119,30 +187,40 @@ foreach my $k ( sort { $protoport{$b} <=> $protoport{$a} } keys %protoport ) {
 	}
 	print "$k$tabs=>\t$protoport{$k}\n";
 	$i++;
-	last if ( $i >= 10 );
+	last if ( $i >= $_depth );
 }
 
 $i = 0;
-print colored("\nTop 10 Source Countries:\n", "cyan");
-print colored("==========================\n", "cyan");
+if ($nocolor) {
+	print "\nTop $_depth Source Countries:\n";
+	print "==========================\n";
+} else {
+	print colored("\nTop $_depth Source Countries:\n", "cyan");
+	print colored("==========================\n", "cyan");
+}
 foreach my $sc ( sort { $src_countries{$b} <=> $src_countries{$a} } keys %src_countries ) {
 	my $tabs = "";
 	if (length($sc) >= 17) {
 		$tabs = "\t";
-	} elsif ((length($sc) < 17) && (length($sc) >= 7)) {
+	} elsif ((length($sc) < 17) && (length($sc) > 7)) {
 		$tabs = "\t\t";
-	} elsif (length($sc) < 7) {
+	} elsif (length($sc) <= 7) {
 		$tabs = "\t\t\t";
 	}
 
 	print "$sc$tabs=>\t$src_countries{$sc}\n";
 	$i++;
-	last if ( $i >= 10 );
+	last if ( $i >= $_depth );
 }
 
 $i = 0;
-print colored("\nTop 10 Destination Countries:\n", "cyan");
-print colored("===============================\n", "cyan");
+if ($nocolor) {
+	print "\nTop $_depth Destination Countries:\n";
+	print "===============================\n";
+} else {
+	print colored("\nTop $_depth Destination Countries:\n", "cyan");
+	print colored("===============================\n", "cyan");
+}
 foreach my $dc ( sort { $dest_countries{$b} <=> $dest_countries{$a} } keys %dest_countries ) {
 	my $tabs = "";
 	if (length($dc) >= 9) {
@@ -152,9 +230,26 @@ foreach my $dc ( sort { $dest_countries{$b} <=> $dest_countries{$a} } keys %dest
 	}
 	print "$dc$tabs=>\t$dest_countries{$dc}\n";
 	$i++;
-	last if ( $i >= 10 );
+	last if ( $i >= $_depth );
 }
+
+exit 0;
+
 #######################################################################
+sub Usage() {
+	print <<EOF;
+$0 [-h|--help] [-d|--depth <depth>] [-n|--nodns] [-c|--config <FILE>]
+
+-h|--help	Displays this message and exits.
+-d|--depth	Sets the "Top X" number.  Default is 10.  Setting a value of 0 displays all.
+-n|--no-dns	Turns off any name resolution.
+-c|--config	Use the specified file as the config file.
+
+EOF
+
+	exit 0;
+}
+
 sub check_geoip_db() {
 	if ( -f "/usr/share/GeoIP/GeoIP.dat" ) {
 		use Data::Dumper;
@@ -162,56 +257,37 @@ sub check_geoip_db() {
 		#print Dumper(@stats);
 		my $time = time();
 		if (($time - $stats[10]) >= 2592000) {
-			print colored("GeoIP.dat file is over 30 days old.  Consider updating.\n", "yellow");
+			if ($nocolor) { print "GeoIP.dat file is over 30 days old.  Consider updating.\n"; } 
+			else { print colored("GeoIP.dat file is over 30 days old.  Consider updating.\n", "yellow"); }
 		} else {
-			print colored("GeoIP.dat OK.\n", "green");
+			if ($nocolor) { print "GeoIP.dat OK.\n"; }
+			else { print colored("GeoIP.dat OK.\n", "green"); }
 		}
 	} else {
-		print color 'red';
-		print "Couldn't find GeoIP.dat.\n";
-		print color 'reset';
+		if ($nocolor) {	print "Couldn't find GeoIP.dat.\n"; }
+		else { print colored("Couldn't find GeoIP.dat.\n", "red"); }
 	}
 }
 
 sub check_perl_mods() {
 	my $status = 0;
-	my $result = `/usr/bin/perl -mNet::Nslookup -e ";" 2>&1`;
-	if ($result =~ /^Can't locate /) {
-		#print colored("Can't find Net::Nslookup.  Installing...", "red");
-		#system("cd; wget http://search.cpan.org/CPAN/authors/id/G/GA/GAAS/Digest-HMAC-1.03.tar.gz > /dev/null 2>&1");
-		#system("cd; tar xf Digest-HMAC-1.03.tar.gz > /dev/null 2>&1; cd Digest-HMAC-1.03/; perl Makefile.PL /dev/null 2>&1; make >/dev/null 2>&1 && make install > /dev/null 2>&1");
-		#system("cd; wget http://search.cpan.org/CPAN/authors/id/N/NL/NLNETLABS/Net-DNS-0.80.tar.gz > /dev/null 2>&1");
-		#system("cd; tar xf Net-DNS-0.80.tar.gz > /dev/null 2>&1; cd Net-DNS-0.80/; perl Makefile.PL > /dev/null 2>&1; make >/dev/null 2>&1 && make install > /dev/null 2>&1");
-		#system("cd; wget http://search.cpan.org/CPAN/authors/id/D/DA/DARREN/Net-Nslookup-2.01.tar.gz > /dev/null 2>&1");
-		#system("cd; tar xf Net-Nslookup-2.01.tar.gz > /dev/null 2>&1; cd Net-Nslookup-2.01/; perl Makefile.PL >/dev/null 2>&1; make >/dev/null 2>&1 && make install > /dev/null 2>&1");
-		#system("cd; rm -rf Digest-HMAC-1.03* Net-DNS-0.80* Net-Nslookup-2.01* > /dev/null 2>&1");
-		#print colored("done.\n", "red");
-		print colored("Couldn't find Net::Nslookup. Please run the included script: install-mods.sh.", "red");
-		$status = 1
-	} elsif ((! defined($result)) || $result eq "") {
-		print colored("Net::Nslookup OK.\n", "green");
-		$status = 1
-	} else {
-		print colored("$result\n", "red");
-		$status = 0
-	}
-	if ($status == 0) { return $status; }
-	# Geo::IP wants libgeoip to be newer than v1.5.0, which it apparently isn't.
-	# So we'll use the PurePerl version, which works just as well.
-	$result = `/usr/bin/perl -mGeo::IP::PurePerl -e ";" 2>&1`;
-	if ($result =~ /^Can't locate /) {
-		#print colored("Can't find Geo::IP::PurePerl.  Installing...", "red");
-		#system("cd; wget http://search.cpan.org/CPAN/authors/id/B/BO/BORISZ/Geo-IP-PurePerl-1.25.tar.gz >/dev/null 2>&1");
-		#system("cd; tar xf Geo-IP-PurePerl-1.25.tar.gz > /dev/null 2>&1; cd Geo-IP-PurePerl-1.25/; perl Makefile.PL > /dev/null 2>&1; make >/dev/null 2>&1 && make insstall > /dev/null 2>&1");
-		#print colored("done.\n", "red");
-		print colored("Couldn't find Geo::IP::PurePerl.  Please run the included script: install-mods.sh.", "red");
-		$status = 1;
-	} elsif ((!defined($result)) || $result eq "") {
-		print colored("Geo::IP::PurePerl OK\n", "green");
-		$status = 1;
-	} else {
-		print colored("$result\n", "red");
-		$status = 0;
+	my @mods = ("Net::Nslookup", "Geo::IP::PurePerl", "Date::Calc", "Config::Simple");
+	foreach my $mod ( @mods ) {
+		my $result = `/usr/bin/perl -m$mod -e ";" 2>&1`;
+		if ($result =~ /^Can't locate /) {
+			if ($nocolor) { print "Couldn't find $mod. Please run the included script: install-mods.sh.\n" }
+			else { print colored("Couldn't find $mod. Please run the included script: install-mods.sh.\n", "red"); }
+			$status = 1
+		} elsif ((! defined($result)) || $result eq "") {
+			if ($nocolor) { print "$mod OK.\n" }
+			else { print colored("$mod OK.\n", "green"); }
+			$status = 1
+		} else {
+			if ($nocolor) { print "$result\n"; }
+			else { print colored("$result\n", "red"); }
+			$status = 0
+		}
+		if ($status == 0) { return $status; }
 	}
 	#system("sed -i -e 's/#\(use .*\)/\1/g' $0");
 	return $status;
