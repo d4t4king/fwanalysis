@@ -9,22 +9,20 @@ use Data::Dumper;
 use Getopt::Long;
 
 my $_depth = "10";
-my $_config = "fwa.conf";
+#my $_config = "fwa.conf";
 
-if ((defined($config)) && ($config ne "") { $config = $_config; }
+#if ((defined($config)) && ($config ne "") { $config = $_config; }
 
-my $cfg = new Config::Simple($config);
-if (!defined($depth)) {	$depth = $cfg->param('Depth'); }
-if (!defined($nodns)) { $nodns = $cfg->param('NoDNS'); }
-if (!defined($nocolor)) { $nocolor = $cfg->param('NoColor'); }
+#my $cfg = new Config::Simple($config);
+#if (!defined($depth)) {	$depth = $cfg->param('Depth'); }
+#if (!defined($nodns)) { $nodns = $cfg->param('NoDNS'); }
+#if (!defined($nocolor)) { $nocolor = $cfg->param('NoColor'); }
 
-if (($depth) && ($depth ne "") && ($depth =~ /\d+/)) { $_depth = $depth; }
 
-my ($help, $nodns, $nocolor);
+my ($help, $depth, $nodns, $nocolor);
 GetOptions(
 	'h|help'	=> \$help,
 	'd|depth=s'	=> \$depth,
-	'c|config=s'	=> \$config,
 	'n|no-dns'	=> \$nodns,
 	'nc|no-color'	=> \$nocolor
 );
@@ -35,9 +33,10 @@ if (&check_perl_mods()) {
 	use Net::Nslookup;
 	use Geo::IP::PurePerl;
 	use Date::Calc qw(:all);
-	use Config::Simple;
+	#use Config::Simple;
 }
 
+if (($depth) && ($depth ne "") && ($depth =~ /\d+/)) { $_depth = $depth; }
 
 &check_geoip_db();
 
@@ -238,12 +237,11 @@ exit 0;
 #######################################################################
 sub Usage() {
 	print <<EOF;
-$0 [-h|--help] [-d|--depth <depth>] [-n|--nodns] [-c|--config <FILE>]
+$0 [-h|--help] [-d|--depth <depth>] [-n|--nodns]
 
 -h|--help	Displays this message and exits.
 -d|--depth	Sets the "Top X" number.  Default is 10.  Setting a value of 0 displays all.
 -n|--no-dns	Turns off any name resolution.
--c|--config	Use the specified file as the config file.
 
 EOF
 
