@@ -52,7 +52,7 @@ while (my $line = <FILE>) {
 close FILE or die "Couldn't close messages file: $! \n";
 
 my $gip = Geo::IP::PurePerl->open('/usr/share/GeoIP/GeoIP.dat', GEOIP_MEMORY_CACHE);
-my (%iface_pkts, %inbound_pkts, %outbound_pkts, %dports, %dests, %srcs, %protos, %watched, %protoport, %src_countries, %dest_countries);
+my (%iface_pkts, %inbound_pkts, %outbound_pkts, %dports, %dests, %srcs, %protos, %watched, %protoport, %src_countries, %dest_countries, %filters);
 foreach my $line (@lines) {
 	#Oct 24 18:57:15 swe kernel: [171040.374665] Denied-by-filter:INPUT IN=eth1 OUT= MAC=00:21:9b:fc:95:c4:00:01:5c:64:ae:46:08:00 SRC=184.105.247.254 DST=76.167.67.20 LEN=51 TOS=0x00 PREC=0x00 TTL=54 ID=22438 DF PROTO=UDP SPT=44236 DPT=623 LEN=31
 	# We'll start with a rough glossing over.
@@ -70,6 +70,11 @@ foreach my $line (@lines) {
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=23 / ) { $watched{'telnet'}++; }
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=25 / ) { $watched{'smtp'}++; }
 	if ( $line =~ /PROTO=(.*?) SPT=.*? DPT=(.*?) / ) { $protoport{"$1/$2"}++; }
+	if ( $line =~ /Denied-by-filter:([a-zA-Z]+)/ ) { 
+		my $f = $1;
+		next if ((!defined($f)) || ($f eq ""));
+		$filters{$1}++; 
+	}
 	my $country = $gip->country_name_by_addr($src);
 	if ((!defined($country)) || ($country eq "")) { $country = 'XX'; }
 	$src_countries{$country}++;
@@ -97,6 +102,20 @@ foreach my $p ( sort keys %iface_pkts ) {
 		print colored("$p", "$settings->{$p}");
 	}
 	print "\t=>\t$iface_pkts{$p}\n";
+}
+if ($nocolor) {
+	print "\nNumber of packets per filter:\n";
+	print "=============================\n";
+} else {
+	print colored("\nNumber of packets per filter:\n", "cyan");
+	print colored("=============================\n", "cyan");
+}
+foreach my $f ( sort { $filters{$b} <=> $filters{$a} } keys %filters ) {
+	if (length($f) <= 7) {
+		print "$f\t\t$filters{$f}\n";
+	} else {
+		print "$f:\t$filters{$f}\n";
+	}
 }
 
 print "\nNumber of unique source IPs: ";
@@ -237,11 +256,12 @@ exit 0;
 #######################################################################
 sub Usage() {
 	print <<EOF;
-$0 [-h|--help] [-d|--depth <depth>] [-n|--nodns]
+$0 [-h|--help] [-d|--depth <depth>] [-n|--no-dns] [-nc|--no-color]
 
 -h|--help	Displays this message and exits.
 -d|--depth	Sets the "Top X" number.  Default is 10.  Setting a value of 0 displays all.
 -n|--no-dns	Turns off any name resolution.
+-nc|--no-color	Turns off colorised output.
 
 EOF
 
