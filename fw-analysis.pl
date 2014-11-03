@@ -77,7 +77,12 @@ foreach my $line (@lines) {
 	if ( $line =~ /DST=(.*?) / ) { $dst = $1; $dests{$dst}++; }
 	if ( $line =~ /DPT=(.*?) / ) { $dport = $1; $dports{$dport}++; }
 	if ( $line =~ /PROTO=(.*?) / ) { $proto = $1; $protos{$proto}++; }
-	$packets{"$proto: $src => $dst:$dport"}++;
+	if (((defined($proto)) && ($proto ne "")) &&
+	    ((defined($src)) && ($src ne "")) &&
+	    ((defined($dst)) && ($dst ne "")) &&
+	    ((defined($dport)) && ($dport ne ""))) {
+		$packets{"$proto: $src => $dst:$dport"}++;
+	}
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=(?:8[01]|44[13]) / ) { $watched{'http(s)'}++; }
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=22 / ) { $watched{'ssh'}++; }
 	if ( $line =~ /PROTO=UDP SPT=.*? DPT=123 / ) { $watched{'ntp'}++; }
