@@ -19,12 +19,14 @@ my $_depth = "10";
 #if (!defined($nocolor)) { $nocolor = $cfg->param('NoColor'); }
 
 
-my ($help, $depth, $nodns, $nocolor);
+my ($help, $depth, $nodns, $nocolor, $srcip, $dstip);
 GetOptions(
 	'h|help'	=> \$help,
 	'd|depth=s'	=> \$depth,
 	'n|no-dns'	=> \$nodns,
-	'nc|no-color'	=> \$nocolor
+	'nc|no-color'	=> \$nocolor,
+	'srcip=s'	=> \$srcip,
+	'dstip=s'	=> \$dstip,
 );
 
 if ($help) { &Usage(); }
@@ -52,16 +54,30 @@ while (my $line = <FILE>) {
 close FILE or die "Couldn't close messages file: $! \n";
 
 my $gip = Geo::IP::PurePerl->open('/usr/share/GeoIP/GeoIP.dat', GEOIP_MEMORY_CACHE);
-my (%iface_pkts, %inbound_pkts, %outbound_pkts, %dports, %dests, %srcs, %protos, %watched, %protoport, %src_countries, %dest_countries, %filters);
+
+if ($srcip) {
+	@lines = grep { / SRC=$srcip / } @lines;
+	#foreach my $line ( @lines ) {
+		#next unless ($line =~ /SRC=$srcip/);
+		#print "$line\n";
+	#}
+	#exit 0;
+}
+if ($dstip) {
+	@lines = grep { / DST=$dstip / } @lines;
+}
+
+my (%iface_pkts, %inbound_pkts, %outbound_pkts, %dports, %dests, %srcs, %protos, %watched, %protoport, %src_countries, %dest_countries, %filters, %packets);
 foreach my $line (@lines) {
 	#Oct 24 18:57:15 swe kernel: [171040.374665] Denied-by-filter:INPUT IN=eth1 OUT= MAC=00:21:9b:fc:95:c4:00:01:5c:64:ae:46:08:00 SRC=184.105.247.254 DST=76.167.67.20 LEN=51 TOS=0x00 PREC=0x00 TTL=54 ID=22438 DF PROTO=UDP SPT=44236 DPT=623 LEN=31
 	# We'll start with a rough glossing over.
-	my $src; my $dst;
+	my $src; my $dst; my $dport; my $proto;
 	if ( $line =~ /IN=(.*?) / ) { $iface_pkts{$1}++; }
 	if ( $line =~ /SRC=(.*?) / ) { $src = $1; $srcs{$src}++; }
 	if ( $line =~ /DST=(.*?) / ) { $dst = $1; $dests{$dst}++; }
-	if ( $line =~ /DPT=(.*?) / ) { $dports{$1}++; }
-	if ( $line =~ /PROTO=(.*?) / ) { $protos{$1}++; }
+	if ( $line =~ /DPT=(.*?) / ) { $dport = $1; $dports{$dport}++; }
+	if ( $line =~ /PROTO=(.*?) / ) { $proto = $1; $protos{$proto}++; }
+	$packets{"$proto: $src => $dst:$dport"}++;
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=(?:8[01]|44[13]) / ) { $watched{'http(s)'}++; }
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=22 / ) { $watched{'ssh'}++; }
 	if ( $line =~ /PROTO=UDP SPT=.*? DPT=123 / ) { $watched{'ntp'}++; }
@@ -70,7 +86,7 @@ foreach my $line (@lines) {
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=23 / ) { $watched{'telnet'}++; }
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=25 / ) { $watched{'smtp'}++; }
 	if ( $line =~ /PROTO=(.*?) SPT=.*? DPT=(.*?) / ) { $protoport{"$1/$2"}++; }
-	if ( $line =~ /Denied-by-filter:([a-zA-Z]+)/ ) { 
+	if ( $line =~ /(\.\.FFC\.\.not\.GREEN\.subnet\.\.|Denied-by-\w+:.*? )/ ) { 
 		my $f = $1;
 		next if ((!defined($f)) || ($f eq ""));
 		$filters{$1}++; 
@@ -247,6 +263,20 @@ foreach my $dc ( sort { $dest_countries{$b} <=> $dest_countries{$a} } keys %dest
 		$tabs = "\t\t";
 	}
 	print "$dc$tabs=>\t$dest_countries{$dc}\n";
+	$i++;
+	last if ( $i >= $_depth );
+}
+
+$i = 0;
+if ($nocolor) {
+	print "\nTop $_depth Packets:\n";
+	print "======================\n";
+} else {
+	print colored("\nTop $_depth Packets:\n", "cyan");
+	print colored("======================\n", "cyan");
+}
+foreach my $p ( sort { $packets{$b} <=> $packets{$a} } keys %packets ) {
+	print "$p => $packets{$p}\n";
 	$i++;
 	last if ( $i >= $_depth );
 }
