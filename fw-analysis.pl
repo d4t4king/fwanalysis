@@ -311,7 +311,7 @@ sub check_geoip_db() {
 		my $time = time();
 		if (($time - $stats[10]) >= 2592000) {
 			if ($nocolor) { print "GeoIP.dat file is over 30 days old.  Consider updating.\n"; } 
-			else { print colored("GeoIP.dat file is over 30 days old.  Consider updating.\n", "yellow"); }
+			else { print colored("GeoIP.dat file is over 30 days old.  Consider updating.\n", "bright_yellow"); }
 		} else {
 			if ($nocolor) { print "GeoIP.dat OK.\n"; }
 			else { print colored("GeoIP.dat OK.\n", "green"); }
@@ -355,8 +355,12 @@ sub get_net_and_dhcp_info() {
 		chomp($line);
 		if ($line =~ /GREEN_DEV=(.*)/) { $ndsettings{$1} = "green"; }
 		if ($line =~ /RED_DEV=(.*)/) { $ndsettings{$1} = "red"; }
+		if ($line =~ /PURPLE_DEV=(.*)/) { $ndsettings{$1} = "yellow"; }
+		if ($line =~ /ORANGE_DEV=(.*)/) { $ndsettings{$1} = "yellow"; }
 		if ($line =~ /GREEN_NETADDRESS=(.*)/) { $ndsettings{'green net addr'} = $1; }
 		if ($line =~ /GREEN_BROADCAST=(.*)/) { $ndsettings{'green net bdcst'} = $1; }
+		if ($line =~ /PURPLE_BROADCAST=(.*)/) { $ndsettings{'purple net bdcst'} = $1; }
+		if ($line =~ /ORANGE_BROADCAST=(.*)/) { $ndsettings{'orange net bdcst'} = $1; }
 	}
 	close ETH or die "Couldn't close ethernet settings file: $! \n";
 
