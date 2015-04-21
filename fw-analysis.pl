@@ -90,6 +90,7 @@ foreach my $line (@lines) {
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=21 / ) { $watched{'ftp'}++; }
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=23 / ) { $watched{'telnet'}++; }
 	if ( $line =~ /PROTO=TCP SPT=.*? DPT=25 / ) { $watched{'smtp'}++; }
+	if ( $line =~ /PROTO=TCP SPT=.*? DPT=7547 / ) { $watched{'cwmp'}++; }
 	if ( $line =~ /PROTO=(.*?) SPT=.*? DPT=(.*?) / ) { $protoport{"$1/$2"}++; }
 	if ( $line =~ /(\.\.FFC\.\.not\.GREEN\.subnet\.\.|Denied-by-\w+:.*? )/ ) { 
 		my $f = $1;
@@ -355,7 +356,7 @@ sub get_net_and_dhcp_info() {
 		chomp($line);
 		if ($line =~ /GREEN_DEV=(.*)/) { $ndsettings{$1} = "green"; }
 		if ($line =~ /RED_DEV=(.*)/) { $ndsettings{$1} = "red"; }
-		if ($line =~ /PURPLE_DEV=(.*)/) { $ndsettings{$1} = "yellow"; }
+		if ($line =~ /PURPLE_DEV=(.*)/) { $ndsettings{$1} = "magenta"; }
 		if ($line =~ /ORANGE_DEV=(.*)/) { $ndsettings{$1} = "yellow"; }
 		if ($line =~ /GREEN_NETADDRESS=(.*)/) { $ndsettings{'green net addr'} = $1; }
 		if ($line =~ /GREEN_BROADCAST=(.*)/) { $ndsettings{'green net bdcst'} = $1; }
