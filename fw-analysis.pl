@@ -325,7 +325,8 @@ sub check_geoip_db() {
 
 sub check_perl_mods() {
 	my $status = 0;
-	my @mods = ("Net::Nslookup", "Geo::IP::PurePerl", "Date::Calc", "Config::Simple");
+	#my @mods = ("Net::Nslookup", "Geo::IP::PurePerl", "Date::Calc", "Config::Simple");
+	my @mods = ("Net::Nslookup", "Geo::IP::PurePerl", "Date::Calc");
 	foreach my $mod ( @mods ) {
 		my $result = `/usr/bin/perl -m$mod -e ";" 2>&1`;
 		if ($result =~ /^Can't locate /) {
