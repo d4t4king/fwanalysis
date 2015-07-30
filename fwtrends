@@ -1,0 +1,77 @@
+#!/usr/bin/env ruby
+
+require 'colorize'
+require 'pp'
+require 'sqlite3'
+
+def mon2num(mon)
+	case mon
+	when /[Jj]an/
+		return 1
+	when /[Ff]eb/
+		return 2
+	when /[Mm]ar/
+		return 3
+	when /[Aa]pr/
+		return 4
+	when /[Mm]ay/
+		return 5
+	when /[Jj]un/
+		return 6
+	when /[Jj]ul/
+		return 7
+	when /[Aa]ug/
+		return 8
+	when /[Ss]ep/
+		return 9
+	when /[Oo]ct/
+		return 10
+	when /[Nn]ov/
+		return 11
+	when /[Dd]ec/
+		return 12
+	else
+		return nil
+	end
+end
+
+port_counts = Hash.new
+
+File.open('/var/log/syslog').each_line do |l|
+	l.chomp!
+	parts = Array.new
+	if l =~ /iptables-input-denied:/
+		#Jul 30 17:51:16 aws5 kernel: [237989.856108] iptables-input-denied: IN=lo OUT= MAC=00:00:00:00:00:00:00:00:00:00:00:00:08:00 SRC=127.0.0.1 DST=127.0.0.1 LEN=52 TOS=0x00 PREC=0x00 TTL=64 ID=32417 DF PROTO=TCP SPT=47737 DPT=27017 WINDOW=43690 RES=0x00 SYN URGP=0
+		parts = l.split(/ /)
+		month = mon2num(parts[0])
+		datestr = "2015-#{month}-#{parts[1]} #{parts[2]}"
+		srcip = ''; dstip = ''
+		dport = ''
+		if parts[10] =~ /SRC=([0-9.]+)/
+			srcip = $1
+		else 
+			print "Couldn't match SRC: ".red
+			puts parts[10].to_s
+		end
+		if parts[11] =~ /DST=([0-9.]+)/
+			dstip = $1
+		else
+			print "Couldn't match DST: ".red
+			puts parts[11].to_s
+		end
+		if parts[20] =~ /DPT=([0-9]+)/
+			dport = $1
+		else 
+			if l =~ /DPT=([0-9]+)/
+				dport = $1
+			else
+				print "Couldn't match DPT: ".red
+				puts l.to_s
+			end
+		end
+		puts "#{srcip} => #{dstip} :: #{dport}".green
+	else
+		puts "Not iptables line.".light_black
+	end
+end
+
