@@ -1,5 +1,5 @@
-#!/usr/bin/perl
-#
+#!/usr/bin/perl -w
+
 
 use strict;
 use warnings;
@@ -7,6 +7,8 @@ use feature qw( switch );
 use Term::ANSIColor;
 use Data::Dumper;
 use Getopt::Long;
+use File::Fetch;
+use IO::Uncompress::Gunzip qw( gunzip $GunzipError );
 
 my $_depth = "10";
 #my $_config = "fwa.conf";
@@ -42,7 +44,20 @@ if (($depth) && ($depth ne "") && ($depth =~ /\d+/)) { $_depth = $depth; }
 
 &check_geoip_db();
 
-my $settings = &get_net_and_dhcp_info();
+my $settings;
+
+if (-e "/var/smoothwall/dhcp/settings" && !-z "/var/smoothwall/dhcp/settings") {
+	$settings = &get_net_and_dhcp_info();
+} else {
+	print "DHCP settings file not found.  Is this a smoothwall system?\n";
+	my $ans = readline();
+	chomp($ans);
+	if ($ans =~ /[Yy](?:es)?/) {
+		die "Unable to locate valid DHCP settings file.  Verify location and try again.\n";
+	} else {
+		# get settings from ipconfig??
+	}
+}
 
 my @lines;
 # get the lines of packets dropped by the FW
@@ -313,6 +328,22 @@ sub check_geoip_db() {
 		if (($time - $stats[10]) >= 2592000) {
 			if ($nocolor) { print "GeoIP.dat file is over 30 days old.  Consider updating.\n"; } 
 			else { print colored("GeoIP.dat file is over 30 days old.  Consider updating.\n", "bright_yellow"); }
+			print "Would you like to attempt to update the GeoIP database now?\n";
+			my $ans = readline();
+			chomp($ans);
+			if ($ans =~ /[Yy](es)?/) {
+				# update the GeoIP database
+				my $ff = File::Fetch->new(uri => 'http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz');
+				my $where = $ff->fetch( 'to' => '/tmp' );
+				print colored("==> $where\n", "magenta");
+				my $input = "/tmp/GeoIP.dat.gz"; 
+				my $output = "/usr/local/share/GeoIP/GeoIP.dat";
+				my $status = gunzip $input => $output
+					or die "gunzip failed: $GunzipError\n";
+			} else {
+				if ($nocolor) { print "Good.  Continuing without updating.\n"; }
+				else { print colored("Good.  Continuing without updating.\n", "yellow"); }
+			}
 		} else {
 			if ($nocolor) { print "GeoIP.dat OK.\n"; }
 			else { print colored("GeoIP.dat OK.\n", "green"); }
