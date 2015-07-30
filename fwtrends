@@ -50,14 +50,22 @@ File.open('/var/log/syslog').each_line do |l|
 		if parts[10] =~ /SRC=([0-9.]+)/
 			srcip = $1
 		else 
-			print "Couldn't match SRC: ".red
-			puts parts[10].to_s
+			if l =~ /SRC=([0-9.]+)/
+				srcip = $1
+			else 
+				print "Couldn't match SRC: ".red
+				puts parts[10].to_s
+			end
 		end
 		if parts[11] =~ /DST=([0-9.]+)/
 			dstip = $1
 		else
-			print "Couldn't match DST: ".red
-			puts parts[11].to_s
+			if l =~ /DST=([0-9.]+)/
+				dstip = $1
+			else
+				print "Couldn't match DST: ".red
+				puts parts[11].to_s
+			end
 		end
 		if parts[20] =~ /DPT=([0-9]+)/
 			dport = $1
