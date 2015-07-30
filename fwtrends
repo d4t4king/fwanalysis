@@ -70,8 +70,15 @@ File.open('/var/log/syslog').each_line do |l|
 			end
 		end
 		puts "#{srcip} => #{dstip} :: #{dport}".green
-	else
-		puts "Not iptables line.".light_black
+		if port_counts.has_key? dport
+			port_counts[dport] += 1
+		else 
+			port_counts[dport] = 1
+		end
+	#else
+	#	puts "Not iptables line.".light_black
 	end
 end
+
+pp port_counts
 
