@@ -46,7 +46,12 @@ if (($depth) && ($depth ne "") && ($depth =~ /\d+/)) { $_depth = $depth; }
 
 my $settings;
 
-if (-e "/var/smoothwall/dhcp/settings" && !-z "/var/smoothwall/dhcp/settings") {
+# FIX ME:  This should check for the DHCP "enable" flag, or
+# it should check for a valid ethernet settings file.  The sub
+# doesn't use the settings from the DHCP config, but it does
+# use the ethernet settings.
+# Chenging this to check for a valid settings file, for now.
+if (-e "/var/smoothwall/dhcp/settings-green" && !-z "/var/smoothwall/dhcp/settings-green") {
 	$settings = &get_net_and_dhcp_info();
 } else {
 	print "DHCP settings file not found.  Is this a smoothwall system?\n";
@@ -64,7 +69,7 @@ my @lines;
 open FILE, "</var/log/messages" or die "Couldn't open messages file: $! \n";
 while (my $line = <FILE>) {
 	chomp($line);
-	push(@lines, $line);
+	if ($line =~ /kernel:/) { push(@lines, $line); }
 }
 close FILE or die "Couldn't close messages file: $! \n";
 
@@ -86,7 +91,7 @@ my (%iface_pkts, %inbound_pkts, %outbound_pkts, %dports, %dests, %srcs, %protos,
 foreach my $line (@lines) {
 	#Oct 24 18:57:15 swe kernel: [171040.374665] Denied-by-filter:INPUT IN=eth1 OUT= MAC=00:21:9b:fc:95:c4:00:01:5c:64:ae:46:08:00 SRC=184.105.247.254 DST=76.167.67.20 LEN=51 TOS=0x00 PREC=0x00 TTL=54 ID=22438 DF PROTO=UDP SPT=44236 DPT=623 LEN=31
 	# We'll start with a rough glossing over.
-	my $src; my $dst; my $dport; my $proto;
+	my $src; my $dst; my $dport; my $proto; my $country;
 	if ( $line =~ /IN=(.*?) / ) { $iface_pkts{$1}++; }
 	if ( $line =~ /SRC=(.*?) / ) { $src = $1; $srcs{$src}++; }
 	if ( $line =~ /DST=(.*?) / ) { $dst = $1; $dests{$dst}++; }
@@ -112,12 +117,24 @@ foreach my $line (@lines) {
 		next if ((!defined($f)) || ($f eq ""));
 		$filters{$1}++; 
 	}
-	my $country = $gip->country_name_by_addr($src);
-	if ((!defined($country)) || ($country eq "")) { $country = 'XX'; }
-	$src_countries{$country}++;
-	$country = $gip->country_name_by_addr($dst);
-	if ((!defined($country)) || ($country eq "")) { $country = 'XX'; }
-	$dest_countries{$country}++;
+	if ((defined($src)) && ($src ne '')) {
+		$country = $gip->country_name_by_addr($src);
+		if ((!defined($country)) || ($country eq "")) { $country = 'XX'; }
+		$src_countries{$country}++;
+	} else {
+		open UM, ">>/tmp/unmatched-src.$$.txt" or die "Couldn't open unmatched dump file for writing: $! \n";
+		print UM "$line\n";
+		close UM or die "Couldn't close unmatched dump file: $! \n";
+	}
+	if ((defined($dst)) && ($dst ne '')) {
+		$country = $gip->country_name_by_addr($dst);
+		if ((!defined($country)) || ($country eq "")) { $country = 'XX'; }
+		$dest_countries{$country}++;
+	} else {
+		open UM, ">>/tmp/unmatched-dst.$$.txt" or die "Couldn't open unmatched dump file for writing: $! \n";
+		print UM "$line\n";
+		close UM or die "Couldn't close unmatched dump file: $! \n";
+	}
 }
 
 my $i = 0;
@@ -337,7 +354,7 @@ sub check_geoip_db() {
 				my $where = $ff->fetch( 'to' => '/tmp' );
 				print colored("==> $where\n", "magenta");
 				my $input = "/tmp/GeoIP.dat.gz"; 
-				my $output = "/usr/local/share/GeoIP/GeoIP.dat";
+				my $output = "/usr/share/GeoIP/GeoIP.dat";
 				my $status = gunzip $input => $output
 					or die "gunzip failed: $GunzipError\n";
 			} else {
@@ -383,6 +400,7 @@ sub get_net_and_dhcp_info() {
 	my %ndsettings;
 	my $leases = "/usr/etc/dhcpd.leases";
 	if ( -f "/var/smoothwall/dhcp/enable" ) { $ndsettings{'dhcp_enabled'} = 1; }
+
 	open ETH, "</var/smoothwall/ethernet/settings" or die "Couldn't open ethernet settings file: $! \n";
 	while (my $line = <ETH>) {
 		chomp($line);
@@ -397,7 +415,7 @@ sub get_net_and_dhcp_info() {
 	}
 	close ETH or die "Couldn't close ethernet settings file: $! \n";
 
-	open LEAS, "</usr/etc/dhcpd.leases";
+	open LEAS, "</usr/etc/dhcpd.leases" or die "Couldn't open DHCP leases file: $! \n";
 	my $lease_data = do { local $/; <LEAS> };
 	close LEAS;
 
