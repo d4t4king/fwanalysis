@@ -21,14 +21,15 @@ my $_depth = "10";
 #if (!defined($nocolor)) { $nocolor = $cfg->param('NoColor'); }
 
 
-my ($help, $depth, $nodns, $nocolor, $srcip, $dstip);
+my ($help, $depth, $nodns, $nocolor, $srcip, $dstip, $mail_to);
 GetOptions(
-	'h|help'	=> \$help,
-	'd|depth=s'	=> \$depth,
-	'n|no-dns'	=> \$nodns,
+	'h|help'		=> \$help,
+	'd|depth=s'		=> \$depth,
+	'n|no-dns'		=> \$nodns,
 	'nc|no-color'	=> \$nocolor,
-	'srcip=s'	=> \$srcip,
-	'dstip=s'	=> \$dstip,
+	'srcip=s'		=> \$srcip,
+	'dstip=s'		=> \$dstip,
+	'm|mail-to=s'	=> \$mail_to
 );
 
 if ($help) { &Usage(); }

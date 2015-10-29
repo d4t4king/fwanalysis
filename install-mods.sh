@@ -103,5 +103,32 @@ if [ ! $? == 0 ]; then
 	make && make install
 fi
 cd
+perl -mMailTools -e ';' > /dev/null 2>&1
+if [ ! $? == 0 ]; then
+	wget http://search.cpan.org/CPAN/authors/id/M/MA/MARKOV/MailTools-2.14.tar.gz
+	tar xf MailTools-2.14.tar.gz
+	cd MailTools-2.14
+	perl Makefile.PL
+	make && make install
+fi
+cd
+perl -mMIME::Types -e ';' > /dev/null 2>&1
+if [ ! $? == 0 ]; then
+	wget http://search.cpan.org/CPAN/authors/id/M/MA/MARKOV/MIME-Types-2.11.tar.gz
+	tar xf MIME-Types-2.11.tar.gz
+	cd MIME-Types-2.11
+	perl Makefile.PL
+	make && make install
+fi
+cd
+perl -mMIME::Lite -e ';' > 2/dev/null 2>&1
+if [ ! $? == 0 ]; then
+	wget http://search.cpan.org/CPAN/authors/id/R/RJ/RJBS/MIME-Lite-3.030.tar.gz
+	tar xf MIME-Lite-3.030.tar.gz
+	cd MIME-Lite-3.030
+	perl Makefile.PL
+	make && make install
+fi
+cd
 
-rm -rf Digest* Net* Geo-IP* Sub* Carp* Bit* Date* Config*
+rm -rf Digest* Net* Geo-IP* Sub* Carp* Bit* Date* Config* Mail* MIME*
