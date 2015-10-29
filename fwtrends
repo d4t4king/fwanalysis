@@ -37,7 +37,8 @@ end
 
 port_counts = Hash.new
 
-File.open('/var/log/syslog').each_line do |l|
+#File.open('/var/log/syslog').each_line do |l|
+File.open('/var/log/messages').each_line do |l|
 	l.chomp!
 	parts = Array.new
 	if l =~ /iptables-input-denied:/

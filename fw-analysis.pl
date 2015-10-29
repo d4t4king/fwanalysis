@@ -9,6 +9,7 @@ use Data::Dumper;
 use Getopt::Long;
 use File::Fetch;
 use IO::Uncompress::Gunzip qw( gunzip $GunzipError );
+use MIME::Lite;
 
 my $_depth = "10";
 #my $_config = "fwa.conf";
@@ -21,7 +22,7 @@ my $_depth = "10";
 #if (!defined($nocolor)) { $nocolor = $cfg->param('NoColor'); }
 
 
-my ($help, $depth, $nodns, $nocolor, $srcip, $dstip, $mail_to);
+my ($help, $depth, $nodns, $nocolor, $srcip, $dstip, $mail_to, $html);
 GetOptions(
 	'h|help'		=> \$help,
 	'd|depth=s'		=> \$depth,
@@ -29,7 +30,8 @@ GetOptions(
 	'nc|no-color'	=> \$nocolor,
 	'srcip=s'		=> \$srcip,
 	'dstip=s'		=> \$dstip,
-	'm|mail-to=s'	=> \$mail_to
+	'm|mail-to=s'	=> \$mail_to,
+	'html'			=> \$html
 );
 
 if ($help) { &Usage(); }
@@ -44,6 +46,11 @@ if (&check_perl_mods()) {
 if (($depth) && ($depth ne "") && ($depth =~ /\d+/)) { $_depth = $depth; }
 
 &check_geoip_db();
+
+if ((defined($html)) && (!defined($mail_to))) { 
+	die "HTML flag is invalid without the MAIL_TO option!";
+	exit 255;
+}
 
 my $settings;
 
@@ -139,22 +146,57 @@ foreach my $line (@lines) {
 }
 
 my $i = 0;
+my $mail_body = '';
 
 print "=" x 72;
 print "\n";
 if ($nocolor) {
-	print "Number of packets per interface:\n";
-	print "================================\n";
+	if ($mail_to) {
+		if ($html) {
+			$mail_body .= "<table border=\"1\"><tr><td colspan=\"2\">Number of packets per interface:</td></tr>";
+		} else {
+			$mail_body .= "Number of packets per interface:\n";
+			$mail_body .= "================================\n";
+		}
+	} else {
+		print "Number of packets per interface:\n";
+		print "================================\n";
+	}
 } else {
-	print colored("Number of packets per interface:\n", "cyan");
-	print colored("================================\n", "cyan");
+	if ($mail_to) {
+		if ($html) {
+			$mail_body .= "<table border=\"1\"><tr><td colspan=\"2\"><font color=\"#00ffff\">Number of packets per interface:</font></td></tr>";
+		} else {
+			$mail_body .= "Number of packets per interface:\n";
+			$mail_body .= "================================\n";
+		}
+	} else {
+		print colored("Number of packets per interface:\n", "cyan");
+		print colored("================================\n", "cyan");
+	}
 }
 foreach my $p ( sort keys %iface_pkts ) {
 	#print "$p => ". nslookup($p) . " ==> $iface_pkts{$p}\n";
 	if ($nocolor) {
-		print "$p";
+		if ($mail_to) {
+			if ($html) {
+				$mail_body .= "<td>$p</td>\n";
+			} else {
+				$mail_body .= "$p\n";
+			}
+		} else {
+			print "$p";
+		}
 	} else {
-		print colored("$p", "$settings->{$p}");
+		if ($mail_to) {
+			if ($html) {
+				$mail_body .= "<td><font color=\"$settings->{$p}\">$p</font></td>\n";
+			} else {
+				$mail_body .= "$p\n";
+			}
+		} else {
+			print colored("$p", "$settings->{$p}");
+		}
 	}
 	print "\t=>\t$iface_pkts{$p}\n";
 }
@@ -320,9 +362,40 @@ foreach my $p ( sort { $packets{$b} <=> $packets{$a} } keys %packets ) {
 	last if ( $i >= $_depth );
 }
 
+if ($mail_to) {
+	if ($html) {
+		&send_mail($mail_to, '', $mail_body, 1);
+	} else {
+		&send_mail($mail_to, '', $mail_body, 0);
+	}
+}
+
 exit 0;
 
 #######################################################################
+sub send_mail() {
+	my $to = shift(@_);
+	my $cc = shift(@_);
+	my $from = 'no-reply-fw-anal@dataking.us';
+	my $hostname = `hostname -f`;
+	chomp($hostname);
+	my $subject = "FW Analysis Summary from $hostname";
+	my $body = shift(@_);
+	my $html = shift(@_);
+
+	my $msg = MIME::Lite->new(
+		From	=> $from,
+		To		=> $to,
+		Cc		=> $cc,
+		Subject	=> $subject,
+		Data	=> $body
+	);
+
+	if ($html) { $msg->attr("content-type" => "text/html"); }
+
+	$msg->send('smtp', '192.168.1.102', Debug=>1 );
+}
+
 sub Usage() {
 	print <<EOF;
 $0 [-h|--help] [-d|--depth <depth>] [-n|--no-dns] [-nc|--no-color]
