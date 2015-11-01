@@ -148,58 +148,62 @@ foreach my $line (@lines) {
 my $i = 0;
 my $mail_body = '';
 
+if ($mail_to) {
+	if ($html) {
+		$mail_body .= "<table border=\"1\">\n\t<tr><td colspan=\"2\">Number of packets per interface:</td></tr>\n";
+		foreach my $p ( sort keys %iface_pkts ) {
+			$mail_body .= "\t<tr><td>$p</td><td>$iface_pkts{$p}</td></td>\n";
+		}
+		$mail_body .= "</table>\n";
+		$mail_body .= "<table border=\"1\">\n\t<tr><td colspan=\"2\">Number of packets per filter:</td></tr>\n";
+		foreach my $f ( sort { $filters{$b} <=> $filters{$a} } keys %filters ) {
+			$mail_body .= "\t<tr><td>$f:</td><td>$filters{$f}</td></tr>\n";
+		}
+		$mail_body .= "</table>\n";
+		$mail_body .= "<table border=\"1\">\n\t<tr><td colspan=\"4\">Number of unique source IPs:</td></tr>\n";
+		foreach my $s ( sort { $srcs{$b} <=> $srcs{$a} } keys %srcs ) {
+			my $name;
+			unless ($nodns) {
+				$name = nslookup('host'=> $s, 'type' => 'PTR');
+				if ((!defined($name)) || ($name eq "")) { $name = "UNRESOLVED"; }
+				if (($name eq "UNRESOLVED") && (exists($settings->{'lease_hash'}{$s}))) {
+					$name = $settings->{'lease_hash'}{$s};
+				}
+				if ($name eq 'UNRESOLVED') {
+					$name = nslookup('host' => $s, 'type' => 'A', 'server' => '127.0.0.1');
+				}
+				if ((!defined($name)) || ($name eq "")) { $name = "UNRESOLVED"; }
+			}
+			my $cc = $gip->country_code_by_addr($s);
+			if ((!defined($cc)) || ($cc eq '')) { $cc = 'XX'; }
+			if ($nodns) { 
+				$mail_body .= "<tr><td>$s</td><td>&nbsp;</td><td>$srcs{$s}</td><td>$cc</td></tr>\n";
+			} else {
+				$mail_body .= "<tr><td>$s</td><td>$name</td><td>$srcs{$s}</td><td>$cc</td></tr>\n";
+			}
+		}
+	}
+}
+
 print "=" x 72;
 print "\n";
 if ($nocolor) {
-	if ($mail_to) {
-		if ($html) {
-			$mail_body .= "<table border=\"1\"><tr><td colspan=\"2\">Number of packets per interface:</td></tr>";
-		} else {
-			$mail_body .= "Number of packets per interface:\n";
-			$mail_body .= "================================\n";
-		}
-	} else {
-		print "Number of packets per interface:\n";
-		print "================================\n";
-	}
+	print "Number of packets per interface:\n";
+	print "================================\n";
 } else {
-	if ($mail_to) {
-		if ($html) {
-			$mail_body .= "<table border=\"1\"><tr><td colspan=\"2\"><font color=\"#00ffff\">Number of packets per interface:</font></td></tr>";
-		} else {
-			$mail_body .= "Number of packets per interface:\n";
-			$mail_body .= "================================\n";
-		}
-	} else {
-		print colored("Number of packets per interface:\n", "cyan");
-		print colored("================================\n", "cyan");
-	}
+	print colored("Number of packets per interface:\n", "cyan");
+	print colored("================================\n", "cyan");
 }
 foreach my $p ( sort keys %iface_pkts ) {
 	#print "$p => ". nslookup($p) . " ==> $iface_pkts{$p}\n";
 	if ($nocolor) {
-		if ($mail_to) {
-			if ($html) {
-				$mail_body .= "<td>$p</td>\n";
-			} else {
-				$mail_body .= "$p\n";
-			}
-		} else {
-			print "$p";
-		}
+		print "$p";
 	} else {
-		if ($mail_to) {
-			if ($html) {
-				$mail_body .= "<td><font color=\"$settings->{$p}\">$p</font></td>\n";
-			} else {
-				$mail_body .= "$p\n";
-			}
-		} else {
-			print colored("$p", "$settings->{$p}");
-		}
+		print colored("$p", "$settings->{$p}");
 	}
 	print "\t=>\t$iface_pkts{$p}\n";
 }
+
 if ($nocolor) {
 	print "\nNumber of packets per filter:\n";
 	print "=============================\n";
@@ -369,6 +373,10 @@ if ($mail_to) {
 		&send_mail($mail_to, '', $mail_body, 0);
 	}
 }
+
+open TMP, ">>/tmp/fwmail.$$.out" or die "Couldn't open tmp output file mail output! $! \n";
+print TMP $mail_body;
+close TMP or die "Couldn't close tmp output file mail output! $! \n";
 
 exit 0;
 
