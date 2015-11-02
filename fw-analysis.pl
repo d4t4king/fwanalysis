@@ -10,6 +10,7 @@ use Getopt::Long;
 use File::Fetch;
 use IO::Uncompress::Gunzip qw( gunzip $GunzipError );
 use MIME::Lite;
+use DBI;
 
 my $_depth = "10";
 #my $_config = "fwa.conf";
@@ -22,7 +23,7 @@ my $_depth = "10";
 #if (!defined($nocolor)) { $nocolor = $cfg->param('NoColor'); }
 
 
-my ($help, $depth, $nodns, $nocolor, $srcip, $dstip, $mail_to, $html);
+my ($help, $depth, $nodns, $nocolor, $srcip, $dstip, $mail_to, $html, $database, $db_file);
 GetOptions(
 	'h|help'		=> \$help,
 	'd|depth=s'		=> \$depth,
@@ -31,7 +32,9 @@ GetOptions(
 	'srcip=s'		=> \$srcip,
 	'dstip=s'		=> \$dstip,
 	'm|mail-to=s'	=> \$mail_to,
-	'html'			=> \$html
+	'html'			=> \$html,
+	'database'		=> \$database,
+	'db-file=s'		=> \$db_file,
 );
 
 if ($help) { &Usage(); }
@@ -145,7 +148,40 @@ foreach my $line (@lines) {
 	}
 }
 
-my $i = 0;
+if ((defined($database)) && ($db_file ne '')) {
+	
+	use Data::Dumper;
+
+	my (%db_sources);
+	my $src_in_db = 0;
+	my $dsts_in_db = 0;
+	my $new_srcs = 0;
+	my $new_dsts = 0;
+	my $total_srcs = 0;
+	my $total_dsts = 0;
+
+	my $dbh = DBI->connect("dbi:SQLite:dbname=$db_file","","");
+	my $sth = $dbh->prepare("SELECT ip_addr,name FROM sources;");
+	$sth->execute();
+	while (my @row = $sth->fetchrow_array()) {
+		print STDERR "IP: $row[0]; Name: $row[1]\n";
+		$db_sources{$row[0]}++;
+	}
+	#print Dumper(@results);
+	exit 1;
+
+	#my %results = &array_to_hash(\@results);
+	#foreach my $src ( %srcs ) {
+	#	unless(exists($results{$src})) {
+	#		$sth->prepare("INSERT INTO sources ('ip_addr') VALUES ('$src');");
+	#		$sth->execute();
+	#		$new_srcs++;
+	#	}
+	#}
+
+	exit 0;
+}
+
 my $mail_body = '';
 
 if ($mail_to) {
@@ -183,7 +219,16 @@ if ($mail_to) {
 			}
 		}
 	}
+	if ($html) {
+		&send_mail($mail_to, '', $mail_body, 1);
+	} else {
+		&send_mail($mail_to, '', $mail_body, 0);
+	}
+
+	exit 0;
 }
+
+my $i = 0;
 
 print "=" x 72;
 print "\n";
@@ -366,13 +411,13 @@ foreach my $p ( sort { $packets{$b} <=> $packets{$a} } keys %packets ) {
 	last if ( $i >= $_depth );
 }
 
-if ($mail_to) {
-	if ($html) {
-		&send_mail($mail_to, '', $mail_body, 1);
-	} else {
-		&send_mail($mail_to, '', $mail_body, 0);
-	}
-}
+#if ($mail_to) {
+#	if ($html) {
+#		&send_mail($mail_to, '', $mail_body, 1);
+#	} else {
+#		&send_mail($mail_to, '', $mail_body, 0);
+#	}
+#}
 
 open TMP, ">>/tmp/fwmail.$$.out" or die "Couldn't open tmp output file mail output! $! \n";
 print TMP $mail_body;
@@ -456,7 +501,7 @@ sub check_geoip_db() {
 sub check_perl_mods() {
 	my $status = 0;
 	#my @mods = ("Net::Nslookup", "Geo::IP::PurePerl", "Date::Calc", "Config::Simple");
-	my @mods = ("Net::Nslookup", "Geo::IP::PurePerl", "Date::Calc");
+	my @mods = ("Net::Nslookup", "Geo::IP::PurePerl", "Date::Calc", "MIME::Lite", "DBD::SQLite");
 	foreach my $mod ( @mods ) {
 		my $result = `/usr/bin/perl -m$mod -e ";" 2>&1`;
 		if ($result =~ /^Can't locate /) {
@@ -531,4 +576,18 @@ sub parse_datetime($) {
 	my ($h, $mm, $s) = split(/:/, $time);
 
 	return ($y, $m, $d, $h, $mm, $s);
+}
+
+sub array_to_hash() {
+	my $ary_ref = shift(@_);
+	my (%hash);
+	if (scalar(@{$ary_ref}) == 0) {
+		return undef;
+	} else {
+		foreach my $ele ( sort @{$ary_ref} ) {
+			if (exists($hash{$ele})) { $hash{$ele}++; }
+			else { $hash{$ele} = 1; }
+		}
+		return %hash;
+	}
 }
