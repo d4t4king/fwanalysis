@@ -167,17 +167,13 @@ if ((defined($database)) && ($db_file ne '')) {
 		print STDERR "IP: $row[0]; Name: $row[1]\n";
 		$db_sources{$row[0]}++;
 	}
-	#print Dumper(@results);
-	exit 1;
-
-	#my %results = &array_to_hash(\@results);
-	#foreach my $src ( %srcs ) {
-	#	unless(exists($results{$src})) {
-	#		$sth->prepare("INSERT INTO sources ('ip_addr') VALUES ('$src');");
-	#		$sth->execute();
-	#		$new_srcs++;
-	#	}
-	#}
+	
+	foreach my $src (sort keys %srcs) {
+		if (!exists($db_sources{$src})) {
+			my $hc = &get_hop_count($src);
+			print colored("INSERT INTO sources (ip_addr, hops) VALUES ('$src', '$hc')\n", "green");
+		}
+	}
 
 	exit 0;
 }
@@ -426,6 +422,27 @@ close TMP or die "Couldn't close tmp output file mail output! $! \n";
 exit 0;
 
 #######################################################################
+sub get_hop_count() {
+	my $host = shift(@_);
+	my $tracert = '/usr/bin/traceroute';				# this may be another file, or another locations on a dufferent system.  SWE is kind of a "closed box" -- we know where executables should belong.
+	my $count = 0;
+	my $rgx_hops = 0;
+	open TR, "$tracert $host |" or die "Couldn't open pipe to traceroute! $! \n";
+	while (my $line = <TR>) {
+		chomp($line);
+		next if ($line =~ /^\s*traceroute to/);
+		if ($line =~ /^\s*?(\d\d?)(?:\s|\t)+(?:[0-9.]+|\*).*/) { $rgx_hops = $1; }
+		else { print colored("Didn't match regex: $line\n", "red"); }
+		$count++;
+	}
+	close TR or die "Couldn't close pipe to traceroute: $! \n";
+
+	print STDERR "rgx_hops = $rgx_hops\n";
+	print STDERR "count = $count\n";
+
+	return $rgx_hops;
+}
+
 sub send_mail() {
 	my $to = shift(@_);
 	my $cc = shift(@_);
