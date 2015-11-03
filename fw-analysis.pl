@@ -152,6 +152,8 @@ if ((defined($database)) && ($db_file ne '')) {
 	
 	use Data::Dumper;
 
+	die "Database file ($db_file) doesn't exist or is zero (0) bytes.\n" if ((! -e $db_file) || (-z $db_file));
+
 	my (%db_sources, %db_dests, %db_countries);
 	my $src_in_db = 0;
 	my $dsts_in_db = 0;
@@ -160,9 +162,39 @@ if ((defined($database)) && ($db_file ne '')) {
 	my $total_srcs = 0;
 	my $total_dsts = 0;
 
+	###########################################################
+	# Start Database/Table setup
+	###########################################################
 	my $dbh = DBI->connect("dbi:SQLite:dbname=$db_file","","");
-	#my $sth = $dbh->prepare("SELECT ip_addr,name FROM sources;");
-	my $sth = $dbh->prepare("SELECT ip_addr FROM sources;");
+	# make sure the db schema is as we expect it
+	# sources
+	my $sth = $dbh->prepare("CREATE TABLE IF NOT EXISTS sources (id INTEGER PRIMARY KEY AUTOINCREMENT, ip_addr TEXT, name TEXT, hops INTEGER, country_index INTEGER, hitcount INTEGER);") or die "Can't prepare statement: $DBI::errstr";
+	my $rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
+
+	# destinations
+	$sth = $dbh->prepare("CREATE TABLE IF NOT EXISTS destinations (id INTEGER PRIMARY KEY AUTOINCREMENT, ip_addr TEXT, name TEXT, hops INTEGER, country_index INTEGER, hitcount INTEGER);") or die "Can't prepare statement: $DBI::errstr";
+	$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
+
+	# countries
+	$sth = $dbh->prepare("CREATE TABLE IF NOT EXISTS countries (id INTEGER PRIMARY KEY AUTOINCREMENT, cc TEXT, name TEXT, hitcount INTEGER") or die "Can't prepare statement: $DBI::errstr";
+	$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
+
+	# dest_ports
+	$sth = $dbh->prepare("CREATE TABLE IF NOT EXISTS dest_ports (id INTEGER PRIMARY KEY AUTOINCREMENT, port_num INTEGER, protocol TEXT, hitcount INTEGER") or die "Can't prepare statement: $DBI::errstr";
+	$rtv = $sth->execute(0 or die "Can't execute statement: $DBI::errstr";
+
+	warn $DBI::errstr if $DBI::err;
+	$sth->finish();
+	###########################################################
+	# End setup
+	###########################################################
+
+	
+	###########################################################
+	# Start of dynamic queries
+	###########################################################
+	#$sth = $dbh->prepare("SELECT ip_addr,name FROM sources;");
+	$sth = $dbh->prepare("SELECT ip_addr FROM sources;");
 	$sth->execute();
 	while (my @row = $sth->fetchrow_array()) {
 		#print STDERR "SRC IP: $row[0]; Name: $row[1]\n";
