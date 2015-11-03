@@ -181,7 +181,7 @@ if ((defined($database)) && ($db_file ne '')) {
 
 	# dest_ports
 	$sth = $dbh->prepare("CREATE TABLE IF NOT EXISTS dest_ports (id INTEGER PRIMARY KEY AUTOINCREMENT, port_num INTEGER, protocol TEXT, hitcount INTEGER") or die "Can't prepare statement: $DBI::errstr";
-	$rtv = $sth->execute(0 or die "Can't execute statement: $DBI::errstr";
+	$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
 
 	warn $DBI::errstr if $DBI::err;
 	$sth->finish();
