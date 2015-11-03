@@ -152,7 +152,7 @@ if ((defined($database)) && ($db_file ne '')) {
 	
 	use Data::Dumper;
 
-	my (%db_sources);
+	my (%db_sources, %db_dests, %db_countries);
 	my $src_in_db = 0;
 	my $dsts_in_db = 0;
 	my $new_srcs = 0;
@@ -161,17 +161,56 @@ if ((defined($database)) && ($db_file ne '')) {
 	my $total_dsts = 0;
 
 	my $dbh = DBI->connect("dbi:SQLite:dbname=$db_file","","");
-	my $sth = $dbh->prepare("SELECT ip_addr,name FROM sources;");
+	#my $sth = $dbh->prepare("SELECT ip_addr,name FROM sources;");
+	my $sth = $dbh->prepare("SELECT ip_addr FROM sources;");
 	$sth->execute();
 	while (my @row = $sth->fetchrow_array()) {
-		print STDERR "IP: $row[0]; Name: $row[1]\n";
+		#print STDERR "SRC IP: $row[0]; Name: $row[1]\n";
+		print STDERR "SRC IP: $row[0]\n";
 		$db_sources{$row[0]}++;
+	}
+
+	#$sth = $dbh->prepare("SELECT ip_addr,name FROM destinations;");
+	$sth = $dbh->prepare("SELECT ip_addr FROM destinations;");
+	$sth->execute();
+	while (my @row = $sth->fetchrow_array()) {
+		#print STDERR "DEST IP: $row[0]; Name; $row[1]\n";
+		print STDERR "DEST IP: $row[0]\n";
+		$db_dests{$row[0]}++;
+	}
+
+	$sth = $dbh->prepare("SELECT id,cc FROM countries;");
+	$sth->execute();
+	while (my @row = $sth->fetchrow_array()) {
+		print STDERR "COUNTRY: $row[0], $row[1]\n";
+		$db_countries{$row[1]} = $row[0];
 	}
 	
 	foreach my $src (sort keys %srcs) {
 		if (!exists($db_sources{$src})) {
-			my $hc = &get_hop_count($src);
-			print colored("INSERT INTO sources (ip_addr, hops) VALUES ('$src', '$hc')\n", "green");
+			#my $hc = &get_hop_count($src);
+			#print colored("INSERT INTO sources (ip_addr, hops) VALUES ('$src', '$hc')\n", "green");
+			print colored("INSERT INTO sources (ip_addr) VALUES ('$src')\n", "green");
+			$sth = $dbh->prepare("INSERT INTO sources (ip_addr) VALUES ('$src')");
+			$sth->execute();
+		}
+	}
+
+	foreach my $dst ( sort keys %dests) {
+		if (!exists($db_dests{$dst})) {
+			#my $hc = &get_hop_count($dst);
+			#print colored("INSERT INTO destinations (ip_addr, hops) VALUES ('$dst', '$hc')\n", "cyan");
+			print colored("INSERT INTO destinations (ip_addr) VALUES ('$dst')\n", "cyan");
+			$sth = $dbh->prepare("INSERT INTO destinations (ip_addr) VALUES ('$dst')");
+			$sth->execute();
+		}
+	}
+
+	foreach my $cc ( sort keys %db_countries) {
+		if (!exists($db_countries{$cc})) {
+			print colored("INSERT INTO countries (cc) VALUES ('$cc')\n", "magenta");
+			$sth = $dbh->prepare("INSERT INTO countries (cc) VALUES ('$cc')");
+			$sth->execute();
 		}
 	}
 
