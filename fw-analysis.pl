@@ -9,8 +9,6 @@ use Data::Dumper;
 use Getopt::Long;
 use File::Fetch;
 use IO::Uncompress::Gunzip qw( gunzip $GunzipError );
-use MIME::Lite;
-use DBI;
 
 my $_depth = "10";
 #my $_config = "fwa.conf";
@@ -23,18 +21,14 @@ my $_depth = "10";
 #if (!defined($nocolor)) { $nocolor = $cfg->param('NoColor'); }
 
 
-my ($help, $depth, $nodns, $nocolor, $srcip, $dstip, $mail_to, $html, $database, $db_file);
+my ($help, $depth, $nodns, $nocolor, $srcip, $dstip, $html);
 GetOptions(
-	'h|help'		=> \$help,
-	'd|depth=s'		=> \$depth,
-	'n|no-dns'		=> \$nodns,
-	'nc|no-color'	=> \$nocolor,
-	'srcip=s'		=> \$srcip,
-	'dstip=s'		=> \$dstip,
-	'm|mail-to=s'	=> \$mail_to,
-	'html'			=> \$html,
-	'database'		=> \$database,
-	'db-file=s'		=> \$db_file,
+	'h|help'		=>	\$help,
+	'd|depth=s'		=>	\$depth,
+	'n|no-dns'		=>	\$nodns,
+	'nc|no-color'	=>	\$nocolor,
+	'srcip=s'		=>	\$srcip,
+	'html'			=>	\$html,
 );
 
 if ($help) { &Usage(); }
@@ -49,11 +43,6 @@ if (&check_perl_mods()) {
 if (($depth) && ($depth ne "") && ($depth =~ /\d+/)) { $_depth = $depth; }
 
 &check_geoip_db();
-
-if ((defined($html)) && (!defined($mail_to))) { 
-	die "HTML flag is invalid without the MAIL_TO option!";
-	exit 255;
-}
 
 my $settings;
 
@@ -331,73 +320,16 @@ foreach my $p ( sort { $packets{$b} <=> $packets{$a} } keys %packets ) {
 	last if ( $i >= $_depth );
 }
 
-#if ($mail_to) {
-#	if ($html) {
-#		&send_mail($mail_to, '', $mail_body, 1);
-#	} else {
-#		&send_mail($mail_to, '', $mail_body, 0);
-#	}
-#}
-
-open TMP, ">>/tmp/fwmail.$$.out" or die "Couldn't open tmp output file mail output! $! \n";
-print TMP $mail_body;
-close TMP or die "Couldn't close tmp output file mail output! $! \n";
-
-exit 0;
-
 #######################################################################
-sub get_hop_count() {
-	my $host = shift(@_);
-	my $tracert = '/usr/bin/traceroute';				# this may be another file, or another locations on a dufferent system.  SWE is kind of a "closed box" -- we know where executables should belong.
-	my $count = 0;
-	my $rgx_hops = 0;
-	open TR, "$tracert $host |" or die "Couldn't open pipe to traceroute! $! \n";
-	while (my $line = <TR>) {
-		chomp($line);
-		next if ($line =~ /^\s*traceroute to/);
-		if ($line =~ /^\s*?(\d\d?)(?:\s|\t)+(?:[0-9.]+|\*).*/) { $rgx_hops = $1; }
-		else { print colored("Didn't match regex: $line\n", "red"); }
-		$count++;
-	}
-	close TR or die "Couldn't close pipe to traceroute: $! \n";
-
-	print STDERR "rgx_hops = $rgx_hops\n";
-	print STDERR "count = $count\n";
-
-	return $rgx_hops;
-}
-
-sub send_mail() {
-	my $to = shift(@_);
-	my $cc = shift(@_);
-	my $from = 'no-reply-fw-anal@dataking.us';
-	my $hostname = `hostname -f`;
-	chomp($hostname);
-	my $subject = "FW Analysis Summary from $hostname";
-	my $body = shift(@_);
-	my $html = shift(@_);
-
-	my $msg = MIME::Lite->new(
-		From	=> $from,
-		To		=> $to,
-		Cc		=> $cc,
-		Subject	=> $subject,
-		Data	=> $body
-	);
-
-	if ($html) { $msg->attr("content-type" => "text/html"); }
-
-	$msg->send('smtp', '192.168.1.102', Debug=>1 );
-}
-
 sub Usage() {
 	print <<EOF;
 $0 [-h|--help] [-d|--depth <depth>] [-n|--no-dns] [-nc|--no-color]
 
--h|--help	Displays this message and exits.
--d|--depth	Sets the "Top X" number.  Default is 10.  Setting a value of 0 displays all.
--n|--no-dns	Turns off any name resolution.
--nc|--no-color	Turns off colorised output.
+-h|--help			Displays this message and exits.
+-d|--depth			Sets the "Top X" number.  Default is 10.  Setting a value of 0 displays all.
+-n|--no-dns			Turns off any name resolution.
+-nc|--no-color			Turns off colorised output.
+--html				Display results with HTML output.
 
 EOF
 
