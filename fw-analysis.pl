@@ -176,11 +176,11 @@ if ((defined($database)) && ($db_file ne '')) {
 	$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
 
 	# countries
-	$sth = $dbh->prepare("CREATE TABLE IF NOT EXISTS countries (id INTEGER PRIMARY KEY AUTOINCREMENT, cc TEXT, name TEXT, hitcount INTEGER") or die "Can't prepare statement: $DBI::errstr";
+	$sth = $dbh->prepare("CREATE TABLE IF NOT EXISTS countries (id INTEGER PRIMARY KEY AUTOINCREMENT, cc TEXT, name TEXT, hitcount INTEGER);") or die "Can't prepare statement: $DBI::errstr";
 	$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
 
 	# dest_ports
-	$sth = $dbh->prepare("CREATE TABLE IF NOT EXISTS dest_ports (id INTEGER PRIMARY KEY AUTOINCREMENT, port_num INTEGER, protocol TEXT, hitcount INTEGER") or die "Can't prepare statement: $DBI::errstr";
+	$sth = $dbh->prepare("CREATE TABLE IF NOT EXISTS dest_ports (id INTEGER PRIMARY KEY AUTOINCREMENT, port_num INTEGER, protocol TEXT, hitcount INTEGER);") or die "Can't prepare statement: $DBI::errstr";
 	$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
 
 	warn $DBI::errstr if $DBI::err;
@@ -193,13 +193,12 @@ if ((defined($database)) && ($db_file ne '')) {
 	###########################################################
 	# Start of dynamic queries
 	###########################################################
-	#$sth = $dbh->prepare("SELECT ip_addr,name FROM sources;");
-	$sth = $dbh->prepare("SELECT ip_addr FROM sources;");
+	$sth = $dbh->prepare("SELECT ip_addr,hitcount FROM sources;");
 	$sth->execute();
 	while (my @row = $sth->fetchrow_array()) {
 		#print STDERR "SRC IP: $row[0]; Name: $row[1]\n";
-		print STDERR "SRC IP: $row[0]\n";
-		$db_sources{$row[0]}++;
+		print STDERR "SRC IP: $row[0]\tHitcount: $row[1]\n";
+		$db_sources{$row[0]} += $row[1];
 	}
 
 	#$sth = $dbh->prepare("SELECT ip_addr,name FROM destinations;");
@@ -222,9 +221,11 @@ if ((defined($database)) && ($db_file ne '')) {
 		if (!exists($db_sources{$src})) {
 			#my $hc = &get_hop_count($src);
 			#print colored("INSERT INTO sources (ip_addr, hops) VALUES ('$src', '$hc')\n", "green");
-			print colored("INSERT INTO sources (ip_addr) VALUES ('$src')\n", "green");
-			$sth = $dbh->prepare("INSERT INTO sources (ip_addr) VALUES ('$src')");
+			print colored("INSERT INTO sources (ip_addr, hitcount) VALUES ('$src', '$db_sources{$src}')\n", "green");
+			$sth = $dbh->prepare("INSERT INTO sources (ip_addr, hitcount) VALUES ('$src', '$db_sources{$src}')");
 			$sth->execute();
+		} else {
+			#update the hitcount, if appropriate
 		}
 	}
 
