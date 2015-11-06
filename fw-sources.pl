@@ -8,7 +8,7 @@ use Term::ANSIColor;
 use DBI;
 use IO::Uncompress::Gunzip qw( gunzip $GunzipError );
 use Data::Dumper;
-use Date::Calc qw( This_Year );
+use Date::Calc qw( This_Year Mktime );
 
 my ($dbfile, $onetime, $single);
 my $csv = 0;		# false
@@ -22,10 +22,14 @@ GetOptions(
 	'csv'			=>	\$csv,
 );
 
+my $db = DBI->connect("dbi:SQLite:$dbfile", "", "");
+my ($sth, $rtv);
 if ($dbfile) {
-	my $db = DBI->connect("dbi:SQLite:$dbfile", "", "");
-	my $sth = $db->prepare("CREATE TABLE IF NOT EXISTS sources (id INTEGER PRIMARY KEY AUTOINCREMENT, ip_addr TEXT, name TEXT, country_code TEXT, hitcount INTEGER);") or die "Can't prepare statement: $DBI::errstr";
-	my $rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
+	$sth = $db->prepare("CREATE TABLE IF NOT EXISTS sources (id INTEGER PRIMARY KEY AUTOINCREMENT, ip_addr TEXT, name TEXT, country_code TEXT, datetime DATETIME, hitcount INTEGER);") or die "Can't prepare statement: $DBI::errstr";
+	$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
+	warn $DBI::errstr if $DBI::err;
+	$sth = $db->prepare("CREATE TABLE IF NOT EXISTS dest_ports (id INTEGER PRIMARY KEY AUTOINCREMENT, port_num INTEGER, proto TEXT, datetime DATETIME, hitcount INTEGER") or die "Can't prepare statement: $DBI::errstr";
+	$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
 	warn $DBI::errstr if $DBI::err;
 	$sth->finish();
 	#$db->disconnect();
@@ -50,18 +54,22 @@ if ($onetime) {				# get historical data, then stop
 				#print Dumper($line);
 				if ($line =~ /(\w+)\s*(\d+)\s*([0-9:]+)\s*(\w+)\s*kernel:\s*/) {
 					my $mon = $1; my $day = $2; my $time = $3;
-					$day = "0$day" if (($day < 10) && (length($day) == 1));
+					#$day = "0$day" if (($day < 10) && (length($day) == 1));
 					my $monnum = &mon2num($mon);
 					my $gmt = gmtime();
 					my $year = This_Year($gmt);
+					my $mktime = Mktime($year, $monnum, $day, "0", "0", "0");
 					#my $monstamp = "$year$monnum";
-					my $datestamp = "$year-$monnum-$day";
+					#my $datestamp = "$year-$monnum-$day";
+					#my $datestamp = "$day-$mon-$year";
 					#my $timestamp = "$datestamp".join("", split(/\:/, $time));
 					#print "DEBUG: $timestamp\n";
 					if ($line =~ /SRC=(.*?) /) { 
 						my $ip = $1;
-						next unless ($ip eq $single);
-						$srcs_by_date{"$datestamp"."T00:00:00.000"}{$ip}++; 
+						#next unless ((defined($single)) && ($ip eq $single));
+						#$srcs_by_date{"$datestamp"."T00:00:00.000"}{$ip}++; 
+						#$srcs_by_date{$datestamp}{$ip}++; 
+						$srcs_by_date{$mktime}{$ip}++; 
 						#$srcs_by_src{$1}{$monstamp}++;
 					}
 				}
@@ -76,18 +84,22 @@ if ($onetime) {				# get historical data, then stop
 				#print Dumper($line);
 				if ($line =~ /(\w+)\s*(\d+)\s*([0-9:]+)\s*(\w+)\s*kernel:\s*/) {
 					my $mon = $1; my $day = $2; my $time = $3;
-					$day = "0$day" if (($day < 10) && (length($day) == 1));
+					#$day = "0$day" if (($day < 10) && (length($day) == 1));
 					my $monnum = &mon2num($mon);
 					my $gmt = gmtime();
 					my $year = This_Year($gmt);
+					my $mktime = Mktime($year, $monnum, $day, "0", "0", "0");
 					#my $monstamp = "$year$monnum";
-					my $datestamp = "$year-$monnum-$day";
+					#my $datestamp = "$year-$monnum-$day";
+					#my $datestamp = "$day-$mon-$year";
 					#my $timestamp = "$datestamp".join("", split(/\:/, $time));
 					#print "DEBUG: $timestamp\n";
 					if ($line =~ /SRC=(.*?) /) { 
 						my $ip = $1;
-						next unless ($ip eq $single);
-						$srcs_by_date{"$datestamp"."T00:00:00.000"}{$1}++; 
+						#next unless ((defined($single)) && ($ip eq $single));
+						#$srcs_by_date{"$datestamp"."T00:00:00.000"}{$1}++; 
+						#$srcs_by_date{$datestamp}{$ip}++; 
+						$srcs_by_date{$mktime}{$ip}++; 
 						#$srcs_by_src{$1}{$monstamp}++;
 					}
 				}
@@ -99,14 +111,14 @@ if ($onetime) {				# get historical data, then stop
 	die "You're only working on the hitory stuff, dummy.  Come back to this later.  \nUse the '--onetime' option!\n"
 }
 
-#print Dumper(%srcs_by_date);
+print Dumper(%srcs_by_date);
 
 foreach my $date ( sort keys %srcs_by_date ) {
 #	my $count = 0; my $src = '192.168.1.10';
 	foreach my $src ( sort { $srcs_by_date{$date}{$b} <=> $srcs_by_date{$date}{$a} } keys %{$srcs_by_date{$date}} ) {
 		if ($csv) {
 			if ($single) {
-				print "$date,$srcs_by_date{$date}{$single}\n";
+				print "$date\t$srcs_by_date{$date}{$single}\n";
 			} else {
 				print "$src,$date,$srcs_by_date{$date}{$src}\n";
 			}
@@ -126,20 +138,31 @@ foreach my $date ( sort keys %srcs_by_date ) {
 #		last if ($count >= 9);
 #	}
 #}
+if ($dbfile) {
+	foreach my $date ( keys %srcs_by_date ) {
+		foreach my $src ( keys %{$srcs_by_date{$date}} ) {
+			$sth = $db->prepare("INSERT INTO sources (ip_addr, datetime, hitcount) VALUES ('$src', '$date', '$srcs_by_date{$date}{$src}');") or die "Cn't prepare statement: $DBI::errstr";
+			$rtv = $sth->execute() or die "can't execute statement: $DBI::errstr";
+		}
+	}
+	warn $DBI::errstr if $DBI::err;
+	$sth->finish();
+	$db->disconnect();
+}
 
 ###############################################################################
 sub mon2num() {
 	my $mon = shift(@_);
 	given ($mon) {
-		when (/[Jj]an(?:uary)?/) { return '01'; }
-		when (/[Ff]eb(?:ruary)?/) {	return '02'; }
-		when (/[Mm]ar(?:ch)?/) { return '03'; }
-		when (/[Aa]pr(?:il)?/) { return '04'; }
-		when (/[Mm]ay/) { return '05'; }
-		when (/[Jj]un(?:e)?/) { return '06'; }
-		when (/[Jj]ul(?:y)?/) { return '07'; }
-		when (/[Aa]ug(?:ust)?/) { return '08'; }
-		when (/[Ss]ep(?:tember)?/) { return '09'; }
+		when (/[Jj]an(?:uary)?/) { return '1'; }
+		when (/[Ff]eb(?:ruary)?/) {	return '2'; }
+		when (/[Mm]ar(?:ch)?/) { return '3'; }
+		when (/[Aa]pr(?:il)?/) { return '4'; }
+		when (/[Mm]ay/) { return '5'; }
+		when (/[Jj]un(?:e)?/) { return '6'; }
+		when (/[Jj]ul(?:y)?/) { return '7'; }
+		when (/[Aa]ug(?:ust)?/) { return '8'; }
+		when (/[Ss]ep(?:tember)?/) { return '9'; }
 		when (/[Oo]ct(?:tober)?/) {	return '10'; }
 		when (/[Nn]ov(?:ember)?/) { return '11'; }
 		when (/[Dd]ec(?:ember)?/) { return '12'; }
