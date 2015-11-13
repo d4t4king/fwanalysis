@@ -54,6 +54,7 @@ if ($verbose) { print "Checking GeoIP database....\n"; }
 #
 if ($verbose) { print "Setting up the tables in the database file ($dbfile)....\n"; }
 my $db = DBI->connect("dbi:SQLite:$dbfile", "", "") or die "Can't connect to database: $DBI::errstr";
+
 # countries (lookup table)
 my $sth = $db->prepare("CREATE TABLE IF NOT EXISTS countries (id INTEGER PRIMARY KEY AUTOINCREMENT, cc TEXT, cc3 TEXT, name text)") or die "Can't prepare statement: $DBI::errstr";
 my $rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
@@ -208,12 +209,8 @@ foreach my $src ( sort keys %sources ) {
 		next if ($src eq '0.0.0.1');		# invalid IP
 		print STDERR "SRC: $src\n";
 		my $cc_ref = $gip->get_city_record_as_hash($src);
-		#if (!defined($cc_ref->{'country_code'})) { 
-		#	$cc_ref->{'country_code'} = 'XX'; 
-		#	$cc_ref->{'country_code3'} = 'XXX';
-		#	$cc_ref->{'country_name'} = "Unregistered";
-		#}
 		print STDERR Dumper($cc_ref);
+		if ($cc_ref->{'country_name'} =~ /'/) { $cc_ref->{'country_name'} =~ s/'/''/g; }
 		if (!exists($db_countries_cc{$cc_ref->{'country_code'}})) {
 			$sth = $db->prepare("INSERT INTO countries (cc,cc3,name) VALUES ('$cc_ref->{'country_code'}', '$cc_ref->{'country_code3'}', '$cc_ref->{'country_name'}')") or die "Can't prepare statement: $DBI::errstr";
 			$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
@@ -232,6 +229,19 @@ foreach my $src ( sort keys %sources ) {
 # destinations
 foreach my $dst ( sort keys %dests ) {
 	foreach my $dst_date ( sort keys %{$dests{$dst}} ) {
+		my $cc_ref = $gip->get_city_record_as_hash($dst);
+		print STDERR Dumper($cc_ref);
+		if (!exists($db_countries_cc{$cc_ref->{'country_code'}})) {
+			$sth = $db->prepare("INSERT INTO countries (cc,cc3,name) VALUES ('$cc_ref->{'country_code'}', '$cc_ref->{'country_code3'}', '$cc_ref->{'country_name'}')") or die "Can't prepare statement: $DBI::errstr";
+			$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
+			# "refresh" the lookup hashes with the added values
+			$sth = $db->prepare("SELECT id,cc,name FROM countries") or die "Can't prepare statement: $DBI::errstr";
+			$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
+			while (my @row = $sth->fetchrow_array()) {
+				$db_countries_cc{$row[1]} = $row[0];
+				$db_countries_name{$row[2]} = $row[0];
+			}
+		}
 		$sth = $db->prepare("INSERT INTO destinations (ip_addr,datetime,hitcount) VALUES ('$dst', '$dst_date', '$dests{$dst}{$dst_date}');") or die "Can't prepare statement: $DBI::errstr";
 		$sth->execute() or die "Can't execute statement: $DBI::errstr";
 	}
