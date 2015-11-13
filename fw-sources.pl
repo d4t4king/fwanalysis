@@ -1,5 +1,9 @@
 #!/usr/bin/perl -w
 
+#
+# This script intended to populate dataebase
+# for the graphs CGI.
+#
 use strict;
 use warnings;
 use feature qw( switch );		# on perl 5.18 or later, warnings need to be surpressed here

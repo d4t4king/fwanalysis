@@ -136,7 +136,7 @@ if ($verbose) { print "Loading data from logs into database (filters)....\n"; }
 my (%filters, %iface_pkts, %sources, %dests, %dports, %protos);
 my ($src, $dst, $dport, $proto);
 if ($onetime) {
-	if ($verbose && $onetime) { print "_onetime_ flag set.  Loading historical data...\n"; }
+	if ($verbose) { print "_onetime_ flag set.  Loading historical data...\n"; }
 	my @files = `/bin/ls -1 /var/log/messages*`;
 	foreach my $file (reverse @files) {
 		chomp($file);
@@ -148,16 +148,28 @@ if ($onetime) {
 				chomp($line);
 				next unless ($line =~ /swe\s+kernel\:/);
 				my ($y, $m, $d, $h, $mm, $s, $mkt) = &extract_log_date($line);
-				print STDERR "($y $m $d, $h, $mm, $s, $mkt)\n";
+				if ($verbose) { print STDERR "($y $m $d, $h, $mm, $s, $mkt)\n"; }
 				if ($line =~ /IN=(.*?) /) { $iface_pkts{$1}{$mkt}++; }
 				if ($line =~ /(\.\.FFC\.\.not\.GREEN\.subnet\.\.|Denied-by-\w+:.*? )/) {
 					my $f = $1;
 					next if ((!defined($f)) || ($f eq ''));
 					$filters{$f}{$mkt}++;
 				}
-				if ($line =~ /SRC=(.*?) /) { $src = $1; $sources{$src}{$mkt}++; }
-				if ($line =~ /DST=(.*?) /) { $dst = $1; $dests{$dst}{$mkt}++; }
-				if ($line =~ /DPT=(.*?) /) { $dport = $1; $dports{$dport}{$mkt}++; }
+				if ($line =~ /SRC=(.*?) /) { 
+					$src = $1; 
+					next if (exists($db_sources{$src}{$mkt}));
+					$sources{$src}{$mkt}++; 
+				}
+				if ($line =~ /DST=(.*?) /) { 
+					$dst = $1; 
+					next if (exists($db_dests{$dst}{$mkt}));
+					$dests{$dst}{$mkt}++; 
+				}
+				if ($line =~ /DPT=(.*?) /) { 
+					$dport = $1; 
+					next if (exists($db_dports{$dport}{$mkt}));
+					$dports{$dport}{$mkt}++; 
+				}
 			}
 		} else {
 			open LOG, $file or die "Can't open log file ($file) for reading: $! \n";
@@ -165,16 +177,28 @@ if ($onetime) {
 				chomp($line);
 				next unless ($line =~ /swe\s+kernel\:/);
 				my ($y, $m, $d, $h, $mm, $s, $mkt) = &extract_log_date($line);
-				print STDERR "($y $m $d, $h, $mm, $s, $mkt)\n";
+				if ($verbose) { print STDERR "($y $m $d, $h, $mm, $s, $mkt)\n"; }
 				if ($line =~ /IN=(.*?) /) { $iface_pkts{$1}{$mkt}++; }
 				if ($line =~ /(\.\.FFC\.\.not\.GREEN\.subnet\.\.|Denied-by-\w+:.*? )/) {
 					my $f = $1;
 					next if ((!defined($f)) || ($f eq ''));
 					$filters{$f}{$mkt}++;
 				}
-				if ($line =~ /SRC=(.*?) /) { $src = $1; $sources{$src}{$mkt}++; }
-				if ($line =~ /DST=(.*?) /) { $dst = $1; $dests{$dst}{$mkt}++; }
-				if ($line =~ /DPT=(.*?) /) { $dport = $1; $dports{$dport}{$mkt}++; }
+				if ($line =~ /SRC=(.*?) /) { 
+					$src = $1; 
+					next if (exists($db_sources{$src}{$mkt}));
+					$sources{$src}{$mkt}++; 
+				}
+				if ($line =~ /DST=(.*?) /) { 
+					$dst = $1; 
+					next if (exists($db_dests{$dst}{$mkt}));
+					$dests{$dst}{$mkt}++; 
+				}
+				if ($line =~ /DPT=(.*?) /) { 
+					$dport = $1; 
+					next if (exists($db_dports{$dport}{$mkt}));
+					$dports{$dport}{$mkt}++; 
+				}
 			}
 		}
 	}
