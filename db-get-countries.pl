@@ -9,12 +9,13 @@ use DBI;
 
 my ($db_file, $verbose);
 GetOptions(
-	'd|db-file=s'	=>	\$db_file,
+	'd|dbfile=s'	=>	\$db_file,
 	'v|verbose'		=>	\$verbose,
 );
 
 my (%db_cc, %db_idx_cc, %to_add);
 
+die "Missing databse file specification.  Use the '--dbfile <db_name>' option.\n" if ((!defined($db_file)) || ($db_file eq ''));
 if ($verbose) { print "Setting up database connection....\n"; }
 my $dbh = DBI->connect("dbi:SQLite:dbname=$db_file", "", "") or die "Can't connect to database ($db_file): $DBI::errstr";
 if ($verbose) { print "Prepareing and executing countries query....\n"; }
@@ -31,7 +32,7 @@ my $gip = Geo::IP::PurePerl->open('/usr/share/GeoIP/GeoIP.dat', GEOIP_MEMORY_CAC
 
 # check country index in sources
 if ($verbose) { print "Querying sources....\n"; }
-$sth = $dbh->prepare("SELECT ip_addr,country_index FROM sources") or die "Can't prepare statement: $DBI::errstr";
+$sth = $dbh->prepare("SELECT ip_addr,country_id FROM sources") or die "Can't prepare statement: $DBI::errstr";
 $rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
 while (my @row = $sth->fetchrow_array()) {
 	# if the country index is empty, update it
@@ -76,14 +77,21 @@ while (my @row = $sth->fetchrow_array()) {
 }
 warn $DBI::errstr if $DBI::err;
 $sth->finish();
+if ($verbose) { print "Databse statement handle finished.\n"; }
 
 # loop through the %to_add list again.  This time, update the sources (and destinations(???)) table(s).
+local $/ = 1;
+if ($verbose) { print "Updating sources table with country info...."; }
 foreach my $ip ( sort keys %to_add ) {
 	my ($_cc, $_cn) = split(/\|/, $to_add{$ip});
-	$sth = $dbh->prepare("UPDATE sources SET country_index='$db_cc{$_cc}' WHERE ip_addr='$ip'") or die "Can't prepare statement: $DBI::errstr";
+	#if ($verbose) { print "$ip: $_cc | $_cn \n"; }
+	$sth = $dbh->prepare("UPDATE sources SET country_id='$db_cc{$_cc}' WHERE ip_addr='$ip'") or die "Can't prepare statement: $DBI::errstr";
 	$rtv = $sth->execute() or die "Can't execute statement: $DBI::errstr";
 }
 warn $DBI::errstr if $DBI::err;
 $sth->finish();
+if ($verbose) { print "done.\n"; }
 
 $dbh->disconnect();
+
+exit 0;
