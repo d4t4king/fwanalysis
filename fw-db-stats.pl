@@ -45,6 +45,8 @@ if (&check_perl_mods()) {
 
 if (($depth) && ($depth ne "") && ($depth =~ /\d+/)) { $__depth__ = $depth; }
 
+if (!defined($dbfile)) { warn "Must have database file defined!\n"; &Usage(); }
+
 if ($verbose) { print "Checking GeoIP database....\n"; }
 
 &check_geoip_db();
@@ -283,6 +285,25 @@ $sth->finish() or die "There was a problem cleaning up the statement handle: $DB
 $db->disconnect() or die "There was a problem disconnecting from the database: $DBI::errstr";
 
 ###############################################################################
+sub Usage() {
+	
+	print <<END
+
+perl $0 -d|--dbfile <database file path> [-D|--depth] [depth] [--onetime] [-v|--verbose]
+
+-d|--dbfile			Specifies the full path to the database file to be used.
+-v|--verbose		Display extra output (usually to STDERR)
+--onetime			Process all available log data.  Could also be called "firsttime".
+-D|--depth			Only show top (depth) IPs/hits/etc.
+--crontab			Customize output for routine/periodic crontab execution.
+-h|-?|--help		Display this usefull message.  ;-)
+
+END
+	;
+
+	exit 0;
+}
+
 sub extract_log_date() {
 	my $line = shift(@_);
 	if ($line =~ /(\w+)\s*(\d+)\s*([0-9:]+)\s*(\w+)\s*/) {
