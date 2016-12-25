@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -w
 
 use strict;
 use warnings;
@@ -23,7 +23,7 @@ GetOptions(
 	'D|depth=s'		=>	\$depth,
 	'c|crontab'		=>	\$crontab,
 	'h|?|help'		=>	\$help,
-	'v|verbose'		=>	\$verbose,
+	'v|verbose+'	=>	\$verbose,
 );
 
 my %colors2html = (
@@ -45,7 +45,7 @@ if (&check_perl_mods()) {
 
 if (($depth) && ($depth ne "") && ($depth =~ /\d+/)) { $__depth__ = $depth; }
 
-if (!defined($dbfile)) { warn "Must have database file defined!\n"; &Usage(); }
+if (!defined($dbfile)) { warn yellow("Must have database file defined! \($dbfile\)"); &Usage(); }
 
 if ($verbose) { print "Checking GeoIP database....\n"; }
 
@@ -403,4 +403,29 @@ sub parse_datetime($) {
 	my ($h, $mm, $s) = split(/:/, $time);
 
 	return ($y, $m, $d, $h, $mm, $s);
+}
+
+sub red {
+	my $str = shift;
+	return colored("$str", "red");
+}
+sub boldred {
+	my $str = shift;
+	return colored("$str", "bold red");
+}
+sub yellow {
+	my $str = shift;
+	return colored("$str", "yellow");
+}
+sub boldyellow {
+	my $str = shift;
+	return colored("$str", "bold yellow");
+}
+sub green {
+	my $str = shift;
+	return colored("$str", "green");
+}
+sub boldgreen {
+	my $str = shift;
+	return colored("$str", "bold green");
 }
