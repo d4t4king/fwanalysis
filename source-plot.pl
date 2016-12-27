@@ -15,13 +15,13 @@ while (my $line = <LOG>) {
 	next if ($line !~ /swe\s*kernel\:/);
 	if ($line =~ /SRC=(.*?) /) {
 		my $src = $1;
-		next if ($src =~ /192\.168\.1\.\d+/);		# skip "internal addresses
+		next if ($src =~ /192\.168\.1\.\d+/);		# skip internal addresses
 		$sources{$src}++;
 	}
 }
 close LOG;
 
-print "Found ".scalar(keys(%sources))." unique sources in active log file.\n";
+print STDERR "Found ".scalar(keys(%sources))." unique sources in active log file.\n";
 
 my $kml_header = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n\t<Document>\n";
 my $kml_footer = "\t</Document>\n</kml>\n";

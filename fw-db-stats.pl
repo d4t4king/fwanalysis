@@ -5,7 +5,7 @@ use warnings;
 require 5.010;
 use feature qw( switch );
 
-use Getopt::Long;
+use Getopt::Long qw( :config no_ignore_case bundling );
 use DBI;
 use Term::ANSIColor;
 use Data::Dumper;
@@ -368,7 +368,7 @@ sub check_geoip_db() {
 			print "GeoIP.dat OK.\n";
 		}
 	} else {
-		print "Couldn't find GeoIP.dat.\n";
+		die boldred("Couldn't find GeoIP.dat.");
 	}
 }
 
